@@ -54,10 +54,148 @@ was verified on the live deployment, not just locally.
 
 ---
 
-## What it does
+## Roles and permissions
 
-Every part on a vehicle wears out on its own clock, so the app dates each one by
-its own rule:
+Four roles. Each signs in to **its own home screen with its own navigation** —
+not one dashboard with items greyed out. A technician has no financial page to
+find; a customer has no path to another customer's car.
+
+| Action | Admin | Manager | Technician | Vehicle Owner |
+|---|---|---|---|---|
+| Manage staff accounts & roles | Yes | — | — | — |
+| Edit global service catalog & pricing | Yes | — | — | — |
+| View financial & revenue forecasts | Yes | Yes | — | — |
+| Access Daily Call Priority Desk | Yes | Yes | — | — |
+| Add / edit / delete vehicle records | Yes | Yes | — | — |
+| Send automated customer reminders | Yes | Yes | — | — |
+| Update odometer readings | Yes | Yes | Yes | — |
+| Record completed services | Yes | Yes | — | — |
+| Submit vehicle inspection forms | Yes | Yes | Yes | — |
+| View vehicle service history | Yes | Yes | Yes | Own vehicles only |
+| View vehicle health scores & due items | Yes | Yes | Yes | Own vehicles only |
+| Download service invoices / receipts | Yes | Yes | — | Own vehicles only |
+| Request service appointments | — | — | — | Yes |
+| Edit personal profile / settings | Yes | Yes | Yes | Yes |
+
+**"Own vehicles only" is a real third state**, not a softened yes. A signed-in
+Vehicle Owner reading service history gets only rows belonging to their own
+vehicles, and that is enforced by row-level security in Postgres — opening
+another owner's vehicle by URL fails at the database, not by hiding a link.
+
+Enforced in two places, deliberately:
+
+1. **Row-level security in Postgres.** Page reads go through a session-scoped
+   client carrying the user's JWT, so policies genuinely apply. A signed-out
+   request reads nothing at all.
+2. **A permission check in every server action.** Writes may use the
+   service-role client, which bypasses RLS by design — so the application check
+   in `lib/auth.ts`, not the database policy, is what actually stops an
+   unauthorised write. The policy is the second line.
+
+The table above is generated from `MATRIX` in `lib/permissions.ts` — the same
+array every guard reads, and the same one rendered for an admin at
+`/admin/users`. The published rules and the enforced rules cannot drift apart.
+
+Verified end to end in a real browser by `scripts/test-roles.mjs`, including the
+case that matters: a signed-in customer cannot reach another owner's vehicle.
+
+```
+ADMIN        all staff routes · /garage blocked · prices visible
+MANAGER      /admin* blocked · desk, forecasts, documents, bay · prices visible
+TECHNICIAN   /bay only · desk, financials, admin blocked · NO prices anywhere
+CUSTOMER     /garage and /garage/book only · 3 own vehicles · V02 unreachable
+```
+
+**Sign-up creates customer accounts only.** Staff accounts are made by an admin,
+so nobody can grant themselves workshop access. A sign-up is verified against a
+phone number already on the register.
+
+---
+
+## What the product does
+
+### For the workshop manager — `/desk`
+
+- **A ranked call list, not a dump.** Every vehicle with outstanding work,
+  ordered by a priority score that weighs how overdue things are, what the work
+  is worth, and how long since anyone last contacted that customer.
+- **Reasoning on every row**, in that vehicle's own numbers — *"last done at
+  129,498 km, due every 10,000 km, now 139,372 km, so 126 km left at
+  51.9 km/day"* — so the person making the call can defend the date.
+- **Search and filter** by owner, plate or model; overdue only, due soon only,
+  or everything.
+- **Bilingual reminders.** One click builds a message from that vehicle's real
+  due items and prices, in English or বাংলা with Bangla numerals, ready to copy
+  or open in WhatsApp with the customer's number already filled in.
+
+### For the technician — `/bay`
+
+- **A touch-friendly queue** of vehicles with work outstanding, worst first,
+  with 44px controls for tablet use in the workshop bay.
+- **Odometer intake as the primary action** — the single most valuable number
+  they enter, because every distance-based prediction re-derives from it.
+- **An anomaly guard.** A reading below the last one is refused outright; one
+  implying more than 500 km/day is explained and can be confirmed. A bad reading
+  would otherwise corrupt every distance estimate on that vehicle.
+- **A 20-point inspection** at `/bay/inspect`. Anything marked *needs attention*
+  or *fail* is raised for the office.
+- **No prices anywhere.** Not hidden with CSS — the markup carries no costs.
+
+### For the vehicle owner — `/garage`
+
+- **A health score per car** as a visual gauge, derived from the ratio of
+  healthy to due to overdue items.
+- **A traffic-light list** — red overdue, amber due soon, green healthy — with
+  estimated costs.
+- **Past visits and what each cost.**
+- **Request a service** at `/garage/book` with a preferred date, which lands on
+  the workshop's desk.
+- **Their own vehicles and nothing else.**
+
+### For the owner of the business — `/admin`
+
+- **Revenue this month against last**, from recorded service history rather than
+  a projection, with a six-month trend.
+- **Projected earnings** for the next eight weeks from work already predicted due.
+- **Customer retention**, and who has gone quiet.
+- **User management** at `/admin/users` — create and revoke staff accounts, and
+  the live permission matrix.
+- **System settings** at `/admin/settings` — the predictive variables everything
+  else is calculated from (due-soon window, assumed daily distance for a new
+  vehicle, plausibility limit, churn threshold, document warning), plus the
+  service catalogue.
+
+### Planning and paperwork
+
+- **Eight-week forecast** at `/analytics` — workload and revenue by week, so busy
+  weeks are visible before they arrive. The overdue backlog is counted separately
+  so it cannot inflate week one.
+- **Parts requisition** — what to have in stock for the coming month, aggregated
+  across every vehicle.
+- **Churn detection** — a predicted service that lapsed more than 45 days ago
+  with nothing recorded since.
+- **Document expiry vault** at `/documents` — insurance, fitness, tax token and
+  battery warranty get a wider 30-day warning than a mechanical service, because
+  the consequence is a fine rather than a repair bill.
+
+### Throughout
+
+- **Light, dark and system themes**, with the choice remembered per browser and
+  applied before first paint.
+- **Skeleton loading states, an error boundary, an empty state per list**, and a
+  not-found page.
+- **Works from 375px up.** Verified by screenshot at 390px and 1440px in both
+  colour schemes, with horizontal-overflow and console-error assertions.
+- **Motion respects `prefers-reduced-motion`** — every animation has a branch
+  that renders the final state immediately and runs no scroll-driven motion.
+
+---
+
+## How each item is dated
+
+Every part on a vehicle wears out on its own clock, so each is dated by its own
+rule — one shared interval applied to everything is the failure the problem
+statement calls out:
 
 | Rule | Applies to | How the next due date is worked out |
 |---|---|---|
@@ -72,92 +210,6 @@ dates. A vehicle with only one reading falls back to a documented 25 km/day
 until a second reading exists.
 
 Every item is then graded **overdue**, **due soon** (within 30 days) or **fine**.
-
-### The four required capabilities
-
-**1 · A seeded workshop.** 42 vehicles across 27 owners, each with 3–5 service
-items spanning all three rule types, 2–4 odometer readings, and past service
-records. Loaded from the supplied public dataset (case `PUB-01`).
-
-**2 · A next due date for every item, with a status.** `lib/engine.ts` dates all
-165 items with no gaps and grades each one.
-
-**3 · A daily call list.** The call desk groups everything not `fine` by owner
-and vehicle, highest priority first, and shows **why** each item is due in that
-vehicle's real numbers — for example:
-
-> *Last done at 129,498 km, due every 10,000 km → due at 139,498 km. Now 139,372 km, so 126 km left at 51.9 km/day.*
-
-The ordering rule is printed on the page itself:
-
-```
-priority = 100 per overdue item
-         + 25 per due-soon item
-         + 1 per 500 BDT of pending work
-         + 30 when nobody has called in 7 days
-```
-
-Status dominates, value breaks ties, and the staleness bonus stops a lead being
-dropped because it sits mid-table.
-
-**4 · A vehicle page with service recording.** Each vehicle shows every item,
-its next due date, status, cost and reasoning, plus the full service history.
-**Mark done** records a completed service, which resets *that item only* —
-verified by `npm test`, which services 165 items one at a time and asserts no
-other item's due date moves.
-
-### Beyond the four
-
-- **Fleet analytics** — 8-week workload and revenue forecast as inline SVG,
-  parts requisition for the coming month, and churn detection (a predicted
-  service that lapsed more than 45 days ago with nothing recorded since).
-- **Document expiry vault** — insurance, fitness, tax token and battery warranty
-  get a wider 30-day warning window than a mechanical service, because the
-  consequence is a fine rather than a repair bill.
-- **Bilingual reminders** — a message built from the vehicle's real due items and
-  costs, in English or বাংলা with Bangla numerals, one click to copy or to open
-  WhatsApp with the customer's number already filled in.
-- **Odometer anomaly guard** — a reading below the last one is refused outright;
-  one implying more than 500 km/day is explained and can be confirmed. A bad
-  reading would corrupt every distance estimate on the vehicle.
-- **Vehicle health score** and a searchable register.
-- Skeleton loading states, an error boundary, an empty state per list, a
-  not-found page, light and dark themes, and layouts that work at 375px.
-
----
-
-## Roles and security
-
-Four roles, enforced in two places:
-
-1. **Row-level security in Postgres.** Page reads go through a *session* client
-   carrying the signed-in user's JWT, so policies actually apply. A signed-out
-   request reads nothing at all.
-2. **A permission check in every server action.** Writes use the service-role
-   client, which bypasses RLS by design, so `requirePermission()` in
-   `lib/auth.ts` — not the database policy — is what actually stops an
-   unauthorised write.
-
-`scripts/test-roles.mjs` checks this end to end, including the case that
-matters: **a signed-in customer cannot reach another owner's vehicle.**
-
-```
-ADMIN        all staff routes · /garage blocked · prices visible
-MANAGER      /admin* blocked · desk, forecasts, documents, bay · prices visible
-TECHNICIAN   /bay only · desk, financials, admin blocked · NO prices anywhere
-CUSTOMER     /garage and /garage/book only · 3 own vehicles · V02 unreachable
-```
-
-The permission model mirrors the published roles matrix exactly — all fourteen
-actions, with "Own vehicles only" as a real third state rather than a yes/no.
-`lib/permissions.ts` is the single source: the guards and the table shown on
-/admin/users both read it, so they cannot drift.
-
-**Sign-up creates customer accounts only.** Staff accounts are made by an admin,
-so nobody can grant themselves workshop access. A sign-up is verified against a
-phone number already on the register.
-
----
 
 ## How to run it
 
