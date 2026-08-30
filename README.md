@@ -1,23 +1,24 @@
-# ServiceDue — Vehicle Service Due Predictor
+# Ride Catalyst — Vehicle Service Due Predictor
 
 **Problem P09 · Team T069 · LofiStack Hackathon 2026**
 
 A Dhaka car workshop keeps its service register in a book and in the manager's
 head, so it finds out something was due only when the customer turns up with a
-problem. ServiceDue dates every part on every vehicle by its own rule, and tells
-the workshop **who to call today**.
+problem. Ride Catalyst dates every part on every vehicle by its own rule, and
+tells the workshop **who to call today**.
 
 Live demo: _add your Vercel URL here_
 
-**No account is needed to look around.** The workshop is readable signed out;
-signing in adds role-scoped views and the ability to record work.
+**Workshop data requires signing in.** The landing page explains the product;
+every figure behind it is scoped to the role you sign in as. On the sign-in
+page, tap any demo account and both fields fill themselves.
 
-| Role | Email | Sees |
-|---|---|---|
-| Workshop Admin | `admin@ridecatalyst.demo` | Everything |
-| Workshop Manager | `manager@ridecatalyst.demo` | Call desk, analytics, documents; records work |
-| Service Technician | `tech@ridecatalyst.demo` | Vehicles and history read-only; takes odometer readings |
-| Vehicle Owner | `owner@ridecatalyst.demo` | Only their own 3 vehicles |
+| Role | Email | Lands on | Sees |
+|---|---|---|---|
+| Workshop Admin | `admin@ridecatalyst.demo` | `/admin` | Everything, plus staff accounts and the catalogue |
+| Workshop Manager | `manager@ridecatalyst.demo` | `/desk` | Call desk, forecasts, documents; records work |
+| Service Technician | `tech@ridecatalyst.demo` | `/bay` | Bay queue, odometer, inspections — **no prices** |
+| Vehicle Owner | `owner@ridecatalyst.demo` | `/garage` | Only their own 3 vehicles |
 
 Password for all four: `RideCatalyst!2026`
 
@@ -101,8 +102,7 @@ Four roles, enforced in two places:
 
 1. **Row-level security in Postgres.** Page reads go through a *session* client
    carrying the signed-in user's JWT, so policies actually apply. A signed-out
-   visitor reads through explicit `anon` policies — select only, no insert,
-   update or delete anywhere.
+   request reads nothing at all.
 2. **A permission check in every server action.** Writes use the service-role
    client, which bypasses RLS by design, so `requirePermission()` in
    `lib/auth.ts` — not the database policy — is what actually stops an
@@ -112,12 +112,16 @@ Four roles, enforced in two places:
 matters: **a signed-in customer cannot reach another owner's vehicle.**
 
 ```
-SIGNED OUT   42 vehicles, writes refused with a reason
-MANAGER      42 vehicles
-TECHNICIAN   42 vehicles
-ADMIN        42 vehicles
-CUSTOMER      3 vehicles · own V01 opens · V02 unreachable
+ADMIN        all staff routes · /garage blocked · prices visible
+MANAGER      /admin* blocked · desk, forecasts, documents, bay · prices visible
+TECHNICIAN   /bay only · desk, financials, admin blocked · NO prices anywhere
+CUSTOMER     /garage and /garage/book only · 3 own vehicles · V02 unreachable
 ```
+
+The permission model mirrors the published roles matrix exactly — all fourteen
+actions, with "Own vehicles only" as a real third state rather than a yes/no.
+`lib/permissions.ts` is the single source: the guards and the table shown on
+/admin/users both read it, so they cannot drift.
 
 **Sign-up creates customer accounts only.** Staff accounts are made by an admin,
 so nobody can grant themselves workshop access. A sign-up is verified against a
@@ -133,6 +137,9 @@ npm run dev          # http://localhost:3000
 ```
 
 It runs with no configuration at all — see *What is mocked*.
+
+**Design.** Playfair Display over Inter, warm stone neutrals with a single gold
+accent, light/dark/system themes with the choice stored per browser.
 
 ### With Supabase (the persistent path)
 
