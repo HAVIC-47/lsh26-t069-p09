@@ -5,10 +5,11 @@ import {
   AlertTriangle,
   Clock,
   ClipboardCheck,
+  Hammer,
   Info,
   ChevronRight,
 } from "lucide-react";
-import { requireRole } from "@/lib/auth";
+import { can, requireRole } from "@/lib/auth";
 import { loadCase } from "@/lib/data";
 import { analyse, dailyRun } from "@/lib/engine";
 import { healthScore } from "@/lib/scoring";
@@ -26,6 +27,7 @@ export const dynamic = "force-dynamic";
 
 export default async function BayPage() {
   await requireRole("viewBayQueue");
+  const canService = await can("recordService");
 
   const workshop = await loadCase();
   const rows = analyse(workshop);
@@ -156,19 +158,29 @@ export default async function BayPage() {
                     ))}
                   </ul>
                   <div className="flex flex-wrap gap-2 border-t border-border px-4 py-3">
-                    <Link
-                      href={`/vehicles/${x.v.id}`}
-                      className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium transition-colors duration-200 hover:border-border-strong hover:text-text"
-                    >
-                      Service history
-                      <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                    </Link>
+                    {/* Recording the work is the primary action, so it leads. */}
+                    {canService && (
+                      <Link
+                        href={`/bay/service?vehicle=${x.v.id}`}
+                        className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-primary bg-primary px-3 text-sm font-medium text-on-primary transition-opacity duration-200 hover:opacity-88"
+                      >
+                        <Hammer className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                        Service
+                      </Link>
+                    )}
                     <Link
                       href={`/bay/inspect?vehicle=${x.v.id}`}
                       className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium transition-colors duration-200 hover:border-border-strong hover:text-text"
                     >
                       <ClipboardCheck className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
                       Inspect
+                    </Link>
+                    <Link
+                      href={`/vehicles/${x.v.id}`}
+                      className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium transition-colors duration-200 hover:border-border-strong hover:text-text"
+                    >
+                      Service history
+                      <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
                     </Link>
                   </div>
                 </div>
