@@ -136,32 +136,55 @@ async function latestInspectionFlags(
       .select("id, vehicle_id, created_at")
       .order("created_at", { ascending: false }),
     // A visit that only addressed inspection findings writes a job sheet but no
-    // history row, so job dates count as a service too — otherwise the findings
+    // history row, so jobs count as a service too — otherwise the findings
     // would stay on the list forever after being dealt with.
-    supabase.from("service_jobs").select("vehicle_id, date"),
+    supabase.from("service_jobs").select("vehicle_id, date, created_at"),
   ]);
 
   if (error || !inspections || inspections.length === 0) return out;
 
-  // Keep only the newest inspection per vehicle.
-  const newest = new Map<string, { id: number; date: string }>();
+  // Keep only the newest inspection per vehicle, with its real timestamp.
+  const newest = new Map<string, { id: number; at: number; date: string }>();
   for (const i of inspections) {
     if (!newest.has(i.vehicle_id)) {
-      newest.set(i.vehicle_id, { id: i.id, date: String(i.created_at).slice(0, 10) });
+      newest.set(i.vehicle_id, {
+        id: i.id,
+        at: Date.parse(String(i.created_at)),
+        date: String(i.created_at).slice(0, 10),
+      });
     }
   }
 
-  const lastService = new Map<string, string>();
-  for (const row of [...history, ...(jobs ?? [])]) {
-    const prev = lastService.get(row.vehicle_id);
-    if (!prev || row.date > prev) lastService.set(row.vehicle_id, row.date);
+  /**
+   * When each vehicle was last serviced, as a moment in time.
+   *
+   * Job sheets carry a real timestamp, so they compare exactly. Plain history
+   * rows carry only a date — and every service is stamped with the workshop's
+   * fixed "today" rather than the clock, so comparing dates alone meant that
+   * once a car had been serviced, no later inspection on it ever counted again.
+   * A history row therefore only supersedes an inspection from a strictly
+   * earlier day.
+   */
+  const lastServiceAt = new Map<string, number>();
+  const bump = (vehicleId: string, moment: number) => {
+    const prev = lastServiceAt.get(vehicleId);
+    if (prev === undefined || moment > prev) lastServiceAt.set(vehicleId, moment);
+  };
+
+  for (const j of jobs ?? []) {
+    bump(j.vehicle_id, Date.parse(String(j.created_at)));
+  }
+  for (const h of history) {
+    // Start of that day, not the end. A service recorded today also writes a
+    // job sheet, and that carries the real time — so ordering within a day is
+    // decided by the job. Using end-of-day here would make any same-day service
+    // outrank an inspection done after it, which is the bug this replaced.
+    bump(h.vehicle_id, Date.parse(`${h.date}T00:00:00.000Z`));
   }
 
-  // Strictly greater, so a service on the same day as the inspection clears it:
-  // both carry a date and no time, and same-day work is the response to it.
   const live = [...newest.entries()].filter(([vehicleId, insp]) => {
-    const serviced = lastService.get(vehicleId);
-    return !serviced || insp.date > serviced;
+    const serviced = lastServiceAt.get(vehicleId);
+    return serviced === undefined || insp.at > serviced;
   });
   if (live.length === 0) return out;
 
