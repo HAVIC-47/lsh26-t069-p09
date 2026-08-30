@@ -163,3 +163,112 @@ export async function addReading(vehicleId: string, date: string, km: number) {
     .upsert({ vehicle_id: vehicleId, date, km }, { onConflict: "vehicle_id,date" });
   if (error) throw new Error(`Could not save reading: ${error.message}`);
 }
+
+/* ------------------------------------------------------ adding a vehicle */
+
+export type NewVehicle = {
+  ownerId: string;
+  plate: string;
+  model: string;
+  odometer: number;
+  /** Optional expiry dates; a document is only tracked when one is given. */
+  documents?: { name: string; due_date: string; cost_bdt: string }[];
+};
+
+/**
+ * Registers a vehicle and everything it needs to be schedulable from day one:
+ * an opening odometer reading, the standard catalogue items, and a service
+ * history row per item dated today.
+ *
+ * The history rows matter — without a "last done" a time or distance item
+ * cannot be dated at all, and the vehicle would sit on the register showing
+ * nothing. Dating it from today is the honest reading: the workshop starts
+ * tracking it now.
+ *
+ * Uses the admin client because the caller may be a customer registering their
+ * own car, and customers are deliberately not granted insert rights on the
+ * workshop tables. The permission and ownership checks in the server action run
+ * first — see app/(app)/vehicles/actions.ts.
+ */
+export async function addVehicle(input: NewVehicle): Promise<string> {
+  const { admin, hasSupabase } = await import("./supabase/admin");
+  if (!hasSupabase || !admin) {
+    throw new Error("Adding a vehicle needs Supabase; this deployment has none.");
+  }
+
+  const { CATALOGUE } = await import("./catalogue");
+
+  const [{ data: cfg }, { data: existing }] = await Promise.all([
+    admin.from("app_config").select("today").eq("id", 1).single(),
+    admin.from("vehicles").select("id, plate"),
+  ]);
+
+  const today: string = cfg?.today ?? new Date().toISOString().slice(0, 10);
+  const plate = input.plate.trim();
+
+  if ((existing ?? []).some((v) => v.plate.toLowerCase() === plate.toLowerCase())) {
+    throw new Error(`${plate} is already on the register.`);
+  }
+
+  // Ids follow the dataset's V01… form, continuing from the highest in use.
+  const highest = (existing ?? []).reduce((max, v) => {
+    const n = Number(String(v.id).replace(/\D/g, ""));
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+  const id = `V${String(highest + 1).padStart(2, "0")}`;
+
+  const { error: vErr } = await admin.from("vehicles").insert({
+    id,
+    owner_id: input.ownerId,
+    model: input.model.trim(),
+    plate,
+  });
+  if (vErr) throw new Error(`Could not add the vehicle: ${vErr.message}`);
+
+  const cleanup = async (msg: string) => {
+    await admin.from("vehicles").delete().eq("id", id);
+    throw new Error(msg);
+  };
+
+  const { error: oErr } = await admin
+    .from("odometer_readings")
+    .insert({ vehicle_id: id, date: today, km: input.odometer });
+  if (oErr) await cleanup(`Could not save the odometer reading: ${oErr.message}`);
+
+  const items = [
+    ...CATALOGUE.map((c) => ({
+      vehicle_id: id,
+      name: c.name,
+      rule: c.rule,
+      due_date: null,
+      every_months: c.every_months ?? null,
+      every_km: c.every_km ?? null,
+      cost_bdt: c.cost_bdt,
+    })),
+    ...(input.documents ?? []).map((d) => ({
+      vehicle_id: id,
+      name: d.name,
+      rule: "fixed_date" as const,
+      due_date: d.due_date,
+      every_months: null,
+      every_km: null,
+      cost_bdt: d.cost_bdt,
+    })),
+  ];
+  const { error: iErr } = await admin.from("service_items").insert(items);
+  if (iErr) await cleanup(`Could not add the service items: ${iErr.message}`);
+
+  // Only the interval items need a starting point; a document carries its own
+  // expiry and has no "last done".
+  const history = CATALOGUE.map((c) => ({
+    vehicle_id: id,
+    item_name: c.name,
+    date: today,
+    km: c.rule === "distance_km" ? input.odometer : null,
+    cost_bdt: "0.00",
+  }));
+  const { error: hErr } = await admin.from("service_history").insert(history);
+  if (hErr) await cleanup(`Could not start the service history: ${hErr.message}`);
+
+  return id;
+}

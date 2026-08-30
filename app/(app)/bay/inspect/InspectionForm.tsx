@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Check, ClipboardCheck, Loader2, TriangleAlert } from "lucide-react";
 import { saveInspectionAction, type InspectionState } from "./actions";
 import { INSPECTION_POINTS, VERDICT_LABEL, type Verdict } from "@/lib/inspection";
 import { Button } from "@/components/ui/Button";
+import { VehiclePicker, type PickerVehicle } from "@/components/VehiclePicker";
 
 const VERDICTS: Verdict[] = ["pass", "attention", "fail"];
 
@@ -19,7 +20,7 @@ export function InspectionForm({
   defaultVehicle,
   defaultOdometer,
 }: {
-  vehicles: { id: string; plate: string; model: string; km: number }[];
+  vehicles: PickerVehicle[];
   defaultVehicle?: string;
   defaultOdometer?: number;
 }) {
@@ -28,42 +29,37 @@ export function InspectionForm({
     null
   );
 
+  // Picking a different vehicle refills the odometer with that car's reading.
+  const [odometer, setOdometer] = useState(
+    defaultOdometer ?? vehicles.find((v) => v.id === defaultVehicle)?.km ?? 0
+  );
+
   return (
     <form action={action} className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label htmlFor="vehicle_id" className="block text-sm font-medium">
-            Vehicle
-          </label>
-          <select
-            id="vehicle_id"
-            name="vehicle_id"
-            required
-            defaultValue={defaultVehicle}
-            className="mt-1 h-11 w-full cursor-pointer rounded-lg border border-border bg-surface px-3 text-sm"
-          >
-            {vehicles.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.plate} — {v.model}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="odometer" className="block text-sm font-medium">
-            Odometer now
-            <span className="ml-1 font-normal text-muted">(optional)</span>
-          </label>
-          <input
-            id="odometer"
-            name="odometer"
-            type="number"
-            min={0}
-            step={1}
-            defaultValue={defaultOdometer}
-            className="mt-1 h-11 w-full rounded-lg border border-border bg-surface px-3 nums text-sm"
-          />
-        </div>
+      <div>
+        <p className="mb-2 text-sm font-medium">Vehicle</p>
+        <VehiclePicker
+          vehicles={vehicles}
+          defaultId={defaultVehicle}
+          onChange={(v) => setOdometer(v.km)}
+        />
+      </div>
+
+      <div>
+        <label htmlFor="odometer" className="block text-sm font-medium">
+          Odometer now
+          <span className="ml-1 font-normal text-muted">(optional)</span>
+        </label>
+        <input
+          id="odometer"
+          name="odometer"
+          type="number"
+          min={0}
+          step={1}
+          value={odometer}
+          onChange={(e) => setOdometer(Number(e.target.value))}
+          className="nums mt-1 h-11 w-full max-w-56 rounded-lg border border-border bg-surface px-3 text-sm"
+        />
       </div>
 
       {INSPECTION_POINTS.map((group) => (

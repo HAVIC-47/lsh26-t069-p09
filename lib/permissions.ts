@@ -24,6 +24,7 @@ export type Permission =
   | "requestAppointment"
   | "editOwnProfile"
   // --- internal route guards, derived from the above ---
+  | "addOwnVehicle"
   | "viewExecutive"
   | "viewBayQueue"
   | "viewOwnGarage"
@@ -133,6 +134,15 @@ export const MATRIX: {
   },
 
   // --- internal guards -------------------------------------------------
+  {
+    // Registering your own car is not the same as managing the register, which
+    // the published matrix reserves for staff. Kept as a separate action so
+    // "Add / edit / delete vehicle records" stays true as published.
+    key: "addOwnVehicle",
+    label: "Register your own vehicle",
+    published: false,
+    access: { admin: F, manager: F, technician: N, customer: F },
+  },
   {
     key: "viewExecutive",
     label: "Executive dashboard",

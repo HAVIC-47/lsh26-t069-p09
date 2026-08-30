@@ -7,6 +7,7 @@ import { healthScore } from "@/lib/scoring";
 import { km as fmtKm } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Reveal } from "@/components/motion/Reveal";
+import { AddVehicleForm } from "@/components/AddVehicleForm";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,16 @@ export default async function ProfilePage() {
               );
             })}
           </ul>
+        </Card>
+
+        <Card data-reveal padded={false}>
+          <CardHeader
+            title="Add a vehicle"
+            hint="Register another car to this account — the workshop sees it straight away"
+          />
+          <div className="px-5 py-5">
+            <AddVehicleForm today={workshop.today} />
+          </div>
         </Card>
 
         <Card data-reveal padded={false}>

@@ -7,6 +7,8 @@ import { km as fmtKm, taka } from "@/lib/format";
 import { Empty } from "@/components/ui/Empty";
 import { Button } from "@/components/ui/Button";
 import { Reveal } from "@/components/motion/Reveal";
+import { Card, CardHeader } from "@/components/ui/Card";
+import { AddVehicleForm } from "@/components/AddVehicleForm";
 import { WorkshopDate } from "@/components/WorkshopDate";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +21,7 @@ export default async function VehiclesPage({ searchParams }: PageProps<"/vehicle
   await requireRole("viewServiceHistory");
   // A technician's interface carries no prices at all.
   const showMoney = await can("viewMoney");
+  const canAddVehicle = await can("manageVehicles");
 
   const workshop = await loadCase();
   const rows = analyse(workshop);
@@ -77,6 +80,21 @@ export default async function VehiclesPage({ searchParams }: PageProps<"/vehicle
         </div>
         <Button type="submit">Search</Button>
       </form>
+
+      {canAddVehicle && (
+        <Card padded={false} className="mb-6">
+          <CardHeader
+            title="Add a vehicle"
+            hint="Registers the car with the standard service catalogue, dated from today"
+          />
+          <div className="px-5 py-5">
+            <AddVehicleForm
+              today={workshop.today}
+              owners={workshop.owners.map((o) => ({ id: o.id, name: o.name }))}
+            />
+          </div>
+        </Card>
+      )}
 
       {vehicles.length === 0 ? (
         <Empty

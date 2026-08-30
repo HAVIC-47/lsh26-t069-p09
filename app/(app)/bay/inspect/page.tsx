@@ -40,11 +40,14 @@ export default async function InspectPage({
 
   const workshop = await loadCase();
 
+  const ownerName = new Map(workshop.owners.map((o) => [o.id, o.name]));
+
   const vehicles = workshop.vehicles
     .map((v) => ({
       id: v.id,
       plate: v.plate,
       model: v.model,
+      owner: ownerName.get(v.owner_id) ?? "Unknown owner",
       km: dailyRun(v).last.km,
     }))
     .sort((a, b) => a.plate.localeCompare(b.plate));
@@ -129,7 +132,7 @@ export default async function InspectPage({
           <Card data-reveal padded={false}>
             <CardHeader
               title="New inspection"
-              hint="Everything defaults to pass — change only what needs attention"
+              hint="Search by plate, owner or model, then work down the list — everything defaults to pass"
             />
             <div className="px-5 py-5">
               <InspectionForm
