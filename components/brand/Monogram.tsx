@@ -67,14 +67,11 @@ export function Wordmark({
   return (
     <span className={`flex items-center gap-2.5 ${className}`}>
       <Monogram size={size} className="text-heading" />
-      <span className="leading-none">
-        <span
-          className="block text-[15px] font-semibold tracking-tight text-heading"
-          style={{ fontFamily: "var(--font-playfair), Georgia, serif" }}
-        >
-          Ride Catalyst
-        </span>
-        <span className="eyebrow block text-[9px]">Workshop Intelligence</span>
+      <span
+        className="text-[16px] leading-none font-semibold tracking-tight text-heading"
+        style={{ fontFamily: "var(--font-playfair), Georgia, serif" }}
+      >
+        Ride Catalyst
       </span>
     </span>
   );

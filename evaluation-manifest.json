@@ -1,0 +1,81 @@
+{
+  "team_id": "LSH26-T069",
+  "problem_id": "P09",
+  "repository_name": "lsh26-t069-p09",
+  "live_url": "https://ridecatalyst1.vercel.app/",
+  "demo_video_url_optional": "",
+  "event_start_code": "LSH26-8490-C900",
+  "repository_created_before_release": false,
+  "pre_event_materials": [],
+  "sample_data": {
+    "loads_published_fixture": true,
+    "method": "seed script",
+    "reset_instructions": "The published fixture ships in the repository at data/P09_vehicle_service_public.json and is used unmodified. To restore the initial data at any time, run `npm run seed`. It clears every workshop table and reloads case PUB-01 (27 owners, 42 vehicles, 134 odometer readings, 165 service items, 99 service history rows), then recreates the four demo accounts. It is safe to re-run; nothing else in the database is touched. Judges who only want to look around need not reset anything — recording a service or an odometer reading only adds rows, and `npm run seed` reverses it."
+  },
+  "problem_solving_method": "The core is a pure dating engine that treats each service item by its own rule rather than one shared interval: a fixed_date item takes its printed expiry, a period_months item counts months from its last service (clamped to the end of a short month), and a distance_km item converts kilometres-remaining into a date using that individual vehicle's measured daily running, derived from its own odometer history. Across the seeded workshop that rate spans 18 to 80 km/day, so two cars with identical brake pads get different dates. Keeping the engine pure — no React, no database — is what lets `npm run verify` exercise the real logic against all 25 published cases (4,188 items) without a database, and lets `npm test` prove the reset constraint by servicing all 165 items one at a time and asserting no other item's due date moves. Everything above it (call priority, health scores, the 8-week forecast, churn, revenue) is a further pure function over the same rows. The workshop's 'today' is read from the dataset rather than the clock, so the demo shows the same overdue items on any day it is opened.",
+  "requirements": {
+    "R1": {
+      "status": "complete",
+      "evidence": "42 vehicles across 27 owners, each with 3-5 service items spanning all three rule types, 2-4 odometer readings and past service records. Seeded from the published fixture by scripts/seed.ts; schema in supabase/schema.sql. Visible at /vehicles."
+    },
+    "R2": {
+      "status": "complete",
+      "evidence": "lib/engine.ts — nextDue() branches per rule and dailyRun() measures km/day per vehicle; statusOf() grades every item overdue / due soon / fine. `npm run verify` dates all 4,188 items across all 25 published cases with 0 undatable and 0 malformed. Visible on every vehicle page and the call desk."
+    },
+    "R3": {
+      "status": "complete",
+      "evidence": "app/(app)/desk/page.tsx — owner, phone, vehicle, due items, and a reasoning sentence per item built from that vehicle's real numbers. Ranked by callPriority() in lib/scoring.ts (100 per overdue item, 25 per due-soon, 1 per 500 BDT of pending work, 30 when the customer has not been called in 7 days); the rule is printed on the page itself."
+    },
+    "R4": {
+      "status": "complete",
+      "evidence": "app/(app)/vehicles/[id]/page.tsx lists every item with its next due date, status, cost and reasoning, plus full service history. 'Mark done' (app/actions.ts) records a completed service and resets that item only — asserted by `npm test` (scripts/test-reset.ts), which services all 165 items one at a time and checks no other item's due date moves."
+    }
+  },
+  "team_members": [
+    {
+      "registered_name": "Faisal Hossain",
+      "github_username": "HAVIC-47",
+      "major_contribution": "Sole author of every commit in the repository: dating engine, scoring, Supabase schema and row-level security, role-based access control, all application screens, and the verification scripts.",
+      "evidence_paths_or_commits": [
+        "lib/engine.ts",
+        "lib/scoring.ts",
+        "lib/permissions.ts",
+        "supabase/schema.sql",
+        "scripts/verify.ts",
+        "7cef884",
+        "484e0cf"
+      ]
+    }
+  ],
+  "major_design_decisions": [
+    "Each service item is dated by its own rule rather than a shared interval, and distance-based items use that individual vehicle's measured daily running — a fixed interval applied to every car is the failure the problem statement calls out.",
+    "The workshop's 'today' is a field on the dataset, not the server clock, so the demo shows identical due dates whenever it is opened instead of drifting further out of date each day.",
+    "The dating and scoring logic is pure — no React, no database imports — which is what allows the verification scripts to run the real logic against all 25 published cases without a database.",
+    "Page reads go through a session-scoped Supabase client carrying the user's JWT so row-level security genuinely applies; the service-role client is reserved for seeding. An earlier version read with the service-role key, which silently bypassed every policy.",
+    "Because the service-role client ignores row-level security by design, every write is gated by an application-code permission check first; the database policy is the second line, not the only one.",
+    "The permission matrix lives in one array (lib/permissions.ts) that both the guards and the table shown to an admin read, so the documented rules and the enforced rules cannot drift apart. 'Own vehicles only' is a real third access state, not a yes/no.",
+    "Each of the four roles gets its own home screen and its own navigation rather than one dashboard with items greyed out; a technician's interface carries no prices at all.",
+    "Charts are hand-written inline SVG rather than a charting library, so they inherit the theme tokens, work in both colour schemes, and add no dependency; each has a table alternative for screen readers.",
+    "No field the published dataset does not carry was invented — no VIN, engine number, year, fuel type, owner email or inventory level. The technician on a service record comes from the signed-in profile, which is real rather than fabricated.",
+    "Every animation is wrapped in a reduced-motion branch that renders the final state immediately, and reveals animate from a visible starting point so content is never stranded invisible if JavaScript fails."
+  ],
+  "known_limitations": [
+    "A request for a vehicle that does not exist renders the correct 'Vehicle not found' page but returns HTTP 200 rather than 404: the route group streams a loading skeleton, so the status line is flushed before the not-found path is reached. The skeletons were judged the better trade for a dashboard whose pages each run a full workshop query.",
+    "The technician bay queue is derived from vehicles with outstanding work rather than a real check-in: no check-in table exists in the published dataset. It is labelled as such in the interface.",
+    "Sign-up verification is demo-grade — it checks the phone number against the workshop register and trusts whoever types it. A real deployment would send a one-time code to that number.",
+    "Three actions in the roles matrix are declared and enforced but gate features that are not built yet: adding or editing vehicle records, downloading invoices as PDFs, and editing a personal profile (the profile page is read-only).",
+    "Call dispositions and multi-item job sheets have database tables and policies but no interface yet; a service is still recorded one item at a time.",
+    "Revenue is not split into parts and labour because the published dataset records a single cost per service item with no breakdown behind it. Technician efficiency is likewise unavailable — historical service records carry no technician.",
+    "With no Supabase credentials configured the application falls back to the bundled fixture and treats the visitor as a local development administrator, so that a clean checkout runs without setup. Any deployment with credentials enforces real sign-in.",
+    "Demo account credentials are published deliberately, in the README and on the sign-in page, so judges can sign in as each role. The deployment holds no real customer data."
+  ],
+  "ai_tools_used": [
+    {
+      "tool": "Claude Code (Claude Opus 5)",
+      "used_for": "Dataset analysis, the dating engine and scoring functions, Supabase schema and row-level security policies, role-based access control, all application screens, and the verification scripts.",
+      "how_output_was_verified": "Nothing was accepted on the model's word. The published dataset was probed before any code was written, which corrected four wrong assumptions about its shape (the time rule is in months not days, costs are strings, time-based history rows carry a null odometer, and the case supplies its own 'today'). `npm run verify` re-runs the real engine over all 25 published cases and asserts invariants rather than snapshots — that health scores stay bounded, that an overdue vehicle always outranks a healthy one, that the staleness bonus is worth exactly its stated value, that the weekly forecast loses no rows, and that all three odometer-anomaly branches fire. `npm test` proves the one-item reset constraint across all 165 items. Role scoping was verified end to end in a real browser with scripts/test-roles.mjs, including that a signed-in customer cannot reach another owner's vehicle. Interfaces were checked by screenshot at 390px and 1440px in both colour schemes, which caught two defects that reading the markup had not — a negative 'km left' phrase shown to a service adviser, and a metric whose label made a vehicle count read as a week number."
+    }
+  ],
+  "licenses_file": "LICENSES.md",
+  "declaration": "The information above is complete and truthful to the best of the team's knowledge."
+}

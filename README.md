@@ -7,7 +7,7 @@ head, so it finds out something was due only when the customer turns up with a
 problem. Ride Catalyst dates every part on every vehicle by its own rule, and
 tells the workshop **who to call today**.
 
-Live demo: _add your Vercel URL here_
+**Live demo: <https://ridecatalyst1.vercel.app>**
 
 **Workshop data requires signing in.** The landing page explains the product;
 every figure behind it is scoped to the role you sign in as. On the sign-in
@@ -21,6 +21,36 @@ page, tap any demo account and both fields fill themselves.
 | Vehicle Owner | `owner@ridecatalyst.demo` | `/garage` | Only their own 3 vehicles |
 
 Password for all four: `RideCatalyst!2026`
+
+---
+
+## Where to find each requirement
+
+Sign in as **`manager@ridecatalyst.demo`** to reach all of these. Every row below
+was verified on the live deployment, not just locally.
+
+| # | Requirement | Open this | What you will see |
+|---|---|---|---|
+| **R1** | 40+ vehicles, 25+ owners, three rule types, odometer readings, past services | [`/vehicles`](https://ridecatalyst1.vercel.app/vehicles) → click any row | 42 vehicles, 27 owners. Each vehicle page carries all three rule tags, its odometer history and its past services. |
+| **R2** | A next due date per item by its own rule; distance items use daily running; overdue / due soon / fine | [`/vehicles/V01`](https://ridecatalyst1.vercel.app/vehicles/V01) | Every item has a date, a status badge and its reasoning — e.g. *"due at 139,498 km, now 139,372 km, so 126 km left at 51.9 km/day"*. |
+| **R3** | Daily call list: which owner, which vehicle, which items, why — sorted by an explainable rule | [`/desk`](https://ridecatalyst1.vercel.app/desk) | 41 vehicles ranked, phone numbers, per-item reasoning, a priority score per row, and the ordering rule printed on the page itself. |
+| **R4** | Vehicle page with every item, its due date and cost; record a service so that item resets and history grows | [`/vehicles/V01`](https://ridecatalyst1.vercel.app/vehicles/V01) | Costs per item, full service history, and a **Mark done** button that resets that item alone. |
+
+### Bonus features
+
+| Bonus | Open this | What you will see |
+|---|---|---|
+| Work coming in the next 8 weeks | [`/analytics`](https://ridecatalyst1.vercel.app/analytics) | Weekly workload and revenue chart, parts requisition for the coming month, churn list. |
+| A new odometer reading updates every distance estimate | [`/vehicles/V01`](https://ridecatalyst1.vercel.app/vehicles/V01) → *Update odometer* | Enter a higher reading; every distance-based date on that vehicle re-derives from the new daily running. |
+| Copy-ready reminder message per owner | [`/desk`](https://ridecatalyst1.vercel.app/desk) → **Reminder** on any row | The vehicle's real due items and costs, in English or বাংলা with Bangla numerals, to copy or open in WhatsApp. |
+
+### The three constraints
+
+| Constraint | How it is met | What proves it |
+|---|---|---|
+| Distance items must use the vehicle's own daily running | `dailyRun()` measures km/day from each vehicle's own odometer history — 18 to 80 km/day across the fleet, so identical brake pads give different dates | `npm run verify` asserts the rate varies rather than being fixed |
+| Recording a service must reset that one item only | A history row is written scoped to that one item; nothing else is touched | `npm test` services all 165 items one at a time and asserts no other item's due date moves |
+| The call list must be sorted by a rule you can explain | `100 per overdue item + 25 per due-soon + 1 per 500 BDT of pending work + 30 when nobody has called in 7 days` | The rule is rendered on `/desk` from the same constant the ranking uses, so the two cannot disagree |
 
 ---
 
