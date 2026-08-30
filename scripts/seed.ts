@@ -1,0 +1,189 @@
+/**
+ * Seeds Supabase from the public dataset and creates the four demo accounts.
+ * Run once after applying supabase/schema.sql:
+ *   npm run seed
+ *
+ * Loads case PUB-01 — 42 vehicles across 27 owners, which satisfies the
+ * required minimum of 40 vehicles and 25 owners.
+ */
+import { config } from "dotenv";
+import { createClient } from "@supabase/supabase-js";
+import raw from "../data/P09_vehicle_service_public.json";
+import type { WorkshopCase } from "../lib/types";
+
+config({ path: ".env.local" });
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!url || !key || url.includes("PASTE_") || key.includes("PASTE_")) {
+  console.error(
+    "Missing credentials. Fill NEXT_PUBLIC_SUPABASE_URL and " +
+      "SUPABASE_SERVICE_ROLE_KEY in .env.local first."
+  );
+  process.exit(1);
+}
+
+const db = createClient(url, key, { auth: { persistSession: false } });
+const CASE_ID = process.env.SEED_CASE ?? "PUB-01";
+const c = (raw as { cases: WorkshopCase[] }).cases.find((x) => x.case_id === CASE_ID);
+
+if (!c) {
+  console.error(`Case ${CASE_ID} not found in dataset`);
+  process.exit(1);
+}
+
+const check = (label: string, error: { message: string } | null) => {
+  if (error) {
+    console.error(`✗ ${label}: ${error.message}`);
+    process.exit(1);
+  }
+  console.log(`✓ ${label}`);
+};
+
+/**
+ * Demo password for all four accounts. This is a public demo of a hackathon
+ * submission holding no real customer data; the README states the credentials
+ * openly so a judge can sign in as each role.
+ */
+const DEMO_PASSWORD = "ServiceDue!2026";
+
+const DEMO_USERS = [
+  { email: "admin@servicedue.demo",   full_name: "Ayesha Rahman", role: "admin"      },
+  { email: "manager@servicedue.demo", full_name: "Tanvir Hasan",  role: "manager"    },
+  { email: "tech@servicedue.demo",    full_name: "Sabbir Alam",   role: "technician" },
+  { email: "owner@servicedue.demo",   full_name: "",              role: "customer"   },
+] as const;
+
+async function seedWorkshop(cc: WorkshopCase) {
+  // Children first — everything cascades from vehicles and owners.
+  for (const t of [
+    "call_logs",
+    "service_history",
+    "service_jobs",
+    "service_items",
+    "odometer_readings",
+    "vehicles",
+    "owners",
+  ]) {
+    await db.from(t).delete().neq("id", "__none__");
+  }
+  await db.from("app_config").delete().eq("id", 1);
+  console.log("✓ cleared existing rows");
+
+  check(
+    "app_config",
+    (await db.from("app_config").insert({ id: 1, case_id: cc.case_id, today: cc.today })).error
+  );
+  check(`owners (${cc.owners.length})`, (await db.from("owners").insert(cc.owners)).error);
+
+  check(
+    `vehicles (${cc.vehicles.length})`,
+    (
+      await db.from("vehicles").insert(
+        cc.vehicles.map((v) => ({
+          id: v.id,
+          owner_id: v.owner_id,
+          model: v.model,
+          plate: v.plate,
+        }))
+      )
+    ).error
+  );
+
+  const readings = cc.vehicles.flatMap((v) =>
+    v.odometer_readings.map((r) => ({ vehicle_id: v.id, date: r.date, km: r.km }))
+  );
+  check(
+    `odometer_readings (${readings.length})`,
+    (await db.from("odometer_readings").insert(readings)).error
+  );
+
+  const items = cc.vehicles.flatMap((v) =>
+    v.service_items.map((i) => ({
+      vehicle_id: v.id,
+      name: i.name,
+      rule: i.rule,
+      due_date: i.due_date ?? null,
+      every_months: i.every_months ?? null,
+      every_km: i.every_km ?? null,
+      cost_bdt: i.cost_bdt,
+    }))
+  );
+  check(`service_items (${items.length})`, (await db.from("service_items").insert(items)).error);
+
+  const history = cc.vehicles.flatMap((v) =>
+    v.service_history.map((h) => ({
+      vehicle_id: v.id,
+      item_name: h.item,
+      date: h.date,
+      km: h.km,
+      cost_bdt: h.cost_bdt,
+    }))
+  );
+  check(
+    `service_history (${history.length})`,
+    (await db.from("service_history").insert(history)).error
+  );
+}
+
+async function seedUsers(cc: WorkshopCase) {
+  // The customer account is linked to a real owner from the dataset, so its
+  // scoped view has actual vehicles behind it.
+  const demoOwner = cc.owners.find((o) =>
+    cc.vehicles.some((v) => v.owner_id === o.id)
+  )!;
+
+  const { data: existing } = await db.auth.admin.listUsers();
+
+  for (const u of DEMO_USERS) {
+    const email = u.email;
+    const prior = existing?.users.find((x) => x.email === email);
+    if (prior) await db.auth.admin.deleteUser(prior.id);
+
+    const { data, error } = await db.auth.admin.createUser({
+      email,
+      password: DEMO_PASSWORD,
+      email_confirm: true,
+    });
+    if (error || !data.user) {
+      console.error(`✗ create ${email}: ${error?.message}`);
+      process.exit(1);
+    }
+
+    const isCustomer = u.role === "customer";
+    const { error: pErr } = await db.from("profiles").insert({
+      id: data.user.id,
+      full_name: isCustomer ? demoOwner.name : u.full_name,
+      role: u.role,
+      owner_id: isCustomer ? demoOwner.id : null,
+    });
+    if (pErr) {
+      console.error(`✗ profile for ${email}: ${pErr.message}`);
+      process.exit(1);
+    }
+    console.log(
+      `✓ ${u.role.padEnd(11)} ${email}` +
+        (isCustomer ? `  → owner ${demoOwner.id} (${demoOwner.name})` : "")
+    );
+  }
+
+  return demoOwner;
+}
+
+async function main() {
+  const cc = c!;
+  await seedWorkshop(cc);
+  const demoOwner = await seedUsers(cc);
+
+  const owned = cc.vehicles.filter((v) => v.owner_id === demoOwner.id).length;
+
+  console.log(`\nSeeded ${cc.case_id} — workshop "today" is ${cc.today}`);
+  console.log(`\nDemo sign-ins (password for all four: ${DEMO_PASSWORD})`);
+  for (const u of DEMO_USERS) console.log(`  ${u.role.padEnd(11)} ${u.email}`);
+  console.log(
+    `\nThe customer account sees only ${demoOwner.name}'s ${owned} vehicle(s).`
+  );
+}
+
+main();

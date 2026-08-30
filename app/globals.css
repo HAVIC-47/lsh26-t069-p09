@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/*
+ * Data-dense operational dashboard palette.
+ * Light values are the source of truth; the dark block redefines only what
+ * must change, so no colour has its single definition inside a media query.
+ */
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --text: #0f172a;
+  --heading: #1e3a8a;
+  --muted: #475569;
+
+  --primary: #1e40af;
+  --primary-soft: #dbeafe;
+  --secondary: #3b82f6;
+  --accent: #f59e0b;
+  --accent-soft: #fef3c7;
+
+  --overdue: #b4261c;
+  --overdue-bg: #fdeceb;
+  --soon: #9a5b00;
+  --soon-bg: #fdf2e0;
+  --fine: #1f6b3f;
+  --fine-bg: #eaf5ee;
+
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.06);
+  --shadow-md: 0 4px 12px rgb(15 23 42 / 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c232c;
+    --border: #2a313c;
+    --border-strong: #3d4652;
+
+    --text: #e6edf3;
+    --heading: #93b4ff;
+    --muted: #9aa7b8;
+
+    --primary: #7fa0ff;
+    --primary-soft: #1a2545;
+    --secondary: #93b4ff;
+    --accent: #f5b84b;
+    --accent-soft: #3a2c10;
+
+    --overdue: #ff8b80;
+    --overdue-bg: #3a1815;
+    --soon: #f0b45c;
+    --soon-bg: #33240d;
+    --fine: #7cd0a0;
+    --fine-bg: #14291d;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.5);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-heading: var(--heading);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-overdue: var(--overdue);
+  --color-overdue-bg: var(--overdue-bg);
+  --color-soon: var(--soon);
+  --color-soon-bg: var(--soon-bg);
+  --color-fine: var(--fine);
+  --color-fine-bg: var(--fine-bg);
+
+  --font-sans: var(--font-fira-sans);
+  --font-mono: var(--font-fira-code);
+
+  /* z-index scale — nothing invents its own value */
+  --z-base: 10;
+  --z-sticky: 20;
+  --z-overlay: 30;
+  --z-modal: 50;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-fira-sans), system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--heading);
+  letter-spacing: -0.01em;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/*
+ * Reveal targets are NOT hidden here. gsap.fromTo applies its start state
+ * synchronously inside useLayoutEffect, before the browser paints, so there is
+ * no flash of final state — and if JS never runs, the content simply stays
+ * visible instead of being stranded at opacity 0.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
