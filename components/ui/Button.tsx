@@ -3,19 +3,19 @@ import Link from "next/link";
 
 const VARIANTS = {
   primary:
-    "bg-primary text-white border-primary hover:opacity-90 disabled:opacity-50",
+    "bg-primary text-on-primary border-primary hover:opacity-88 disabled:opacity-50",
   secondary:
-    "bg-surface text-text border-border hover:border-primary hover:text-primary disabled:opacity-50",
+    "bg-surface text-text border-border hover:border-border-strong hover:bg-surface-2 disabled:opacity-50",
   accent:
-    "bg-accent text-[#3b2a05] border-accent hover:opacity-90 disabled:opacity-50",
+    "bg-accent-soft text-accent border-accent/30 hover:border-accent disabled:opacity-50",
   ghost:
     "bg-transparent text-muted border-transparent hover:bg-surface-2 hover:text-text",
 } as const;
 
 const SIZES = {
   // 44px minimum touch target on the default size
-  md: "h-11 px-3.5 text-sm",
-  sm: "h-8 px-2.5 text-xs",
+  md: "h-11 px-4 text-[13px]",
+  sm: "h-8 px-3 text-xs",
 } as const;
 
 type Common = {
@@ -26,7 +26,7 @@ type Common = {
 };
 
 const base =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg border font-medium " +
+  "inline-flex items-center justify-center gap-1.5 rounded-full border font-medium " +
   "transition-colors duration-200 cursor-pointer whitespace-nowrap disabled:cursor-not-allowed";
 
 export function Button({
@@ -37,10 +37,7 @@ export function Button({
   ...rest
 }: Common & ComponentProps<"button">) {
   return (
-    <button
-      className={`${base} ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
-      {...rest}
-    >
+    <button className={`${base} ${VARIANTS[variant]} ${SIZES[size]} ${className}`} {...rest}>
       {children}
     </button>
   );
@@ -54,10 +51,7 @@ export function ButtonLink({
   ...rest
 }: Common & ComponentProps<typeof Link>) {
   return (
-    <Link
-      className={`${base} ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
-      {...rest}
-    >
+    <Link className={`${base} ${VARIANTS[variant]} ${SIZES[size]} ${className}`} {...rest}>
       {children}
     </Link>
   );

@@ -97,7 +97,7 @@ export function ReminderPanel({
           href={wa}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-accent bg-accent px-2.5 text-xs font-medium whitespace-nowrap text-[#3b2a05] transition-colors duration-200 hover:opacity-90"
+          className="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-accent bg-accent-soft px-3 text-xs font-medium whitespace-nowrap text-accent transition-colors duration-200 hover:opacity-90"
         >
           <MessageCircle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
           Open in WhatsApp

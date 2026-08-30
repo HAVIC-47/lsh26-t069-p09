@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Car, Search } from "lucide-react";
 import { loadCase } from "@/lib/data";
+import { can, requireRole } from "@/lib/auth";
 import { analyse, dailyRun } from "@/lib/engine";
 import { km as fmtKm, taka } from "@/lib/format";
 import { Empty } from "@/components/ui/Empty";
@@ -14,6 +15,10 @@ export default async function VehiclesPage({ searchParams }: PageProps<"/vehicle
   const params = await searchParams;
   const q = (typeof params.q === "string" ? params.q : "").trim();
   const needle = q.toLowerCase();
+
+  await requireRole("viewServiceHistory");
+  // A technician's interface carries no prices at all.
+  const showMoney = await can("viewMoney");
 
   const workshop = await loadCase();
   const rows = analyse(workshop);
@@ -83,7 +88,7 @@ export default async function VehiclesPage({ searchParams }: PageProps<"/vehicle
         <Reveal>
           <div
             data-reveal
-            className="overflow-x-auto rounded-xl border border-border bg-surface shadow-[var(--shadow-sm)]"
+            className="overflow-x-auto rounded-2xl border border-border bg-surface"
           >
             <table className="w-full text-sm">
               <thead className="border-b border-border text-left text-xs text-muted">
@@ -93,7 +98,9 @@ export default async function VehiclesPage({ searchParams }: PageProps<"/vehicle
                   <th className="px-4 py-2.5 text-right font-medium">Odometer</th>
                   <th className="px-4 py-2.5 text-right font-medium">Overdue</th>
                   <th className="px-4 py-2.5 text-right font-medium">Due soon</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Value</th>
+                  {showMoney && (
+                    <th className="px-4 py-2.5 text-right font-medium">Value</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -102,33 +109,35 @@ export default async function VehiclesPage({ searchParams }: PageProps<"/vehicle
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/vehicles/${x.v.id}`}
-                        className="font-medium transition-colors duration-200 hover:text-primary"
+                        className="font-medium transition-colors duration-200 hover:text-accent"
                       >
                         {x.v.plate}
                       </Link>
                       <div className="text-xs text-muted">{x.v.model}</div>
                     </td>
                     <td className="px-4 py-2.5">{x.owner?.name}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-xs tabular-nums">
+                    <td className="px-4 py-2.5 text-right nums text-xs">
                       {fmtKm(x.odo)}
                     </td>
-                    <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                    <td className="px-4 py-2.5 text-right nums">
                       {x.overdue > 0 ? (
                         <span className="font-semibold text-overdue">{x.overdue}</span>
                       ) : (
                         <span className="text-muted">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                    <td className="px-4 py-2.5 text-right nums">
                       {x.soon > 0 ? (
                         <span className="font-semibold text-soon">{x.soon}</span>
                       ) : (
                         <span className="text-muted">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-right font-mono tabular-nums">
-                      {x.value > 0 ? taka(x.value) : <span className="text-muted">—</span>}
-                    </td>
+                    {showMoney && (
+                      <td className="px-4 py-2.5 text-right nums">
+                        {x.value > 0 ? taka(x.value) : <span className="text-muted">—</span>}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

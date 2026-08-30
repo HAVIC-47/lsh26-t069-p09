@@ -3,7 +3,7 @@ import { ButtonLink } from "@/components/ui/Button";
 
 export default function NotFound() {
   return (
-    <div className="rounded-xl border border-border bg-surface px-6 py-12 text-center">
+    <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center">
       <CarFront
         className="mx-auto mb-3 h-6 w-6 text-muted"
         strokeWidth={1.5}

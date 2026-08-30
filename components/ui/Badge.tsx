@@ -25,7 +25,7 @@ export function StatusBadge({
 }) {
   return (
     <span
-      className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${STATUS_STYLES[status]}`}
+      className={`nums inline-block rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${STATUS_STYLES[status]}`}
     >
       {dueLabel(status, daysUntil)}
     </span>
@@ -41,11 +41,11 @@ export function Tag({
 }) {
   const styles = {
     neutral: "bg-surface-2 text-muted",
-    primary: "bg-primary-soft text-primary",
-    accent: "bg-accent-soft text-soon",
+    primary: "bg-accent-soft text-text",
+    accent: "bg-accent-soft text-accent",
   }[tone];
   return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${styles}`}>
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${styles}`}>
       {children}
     </span>
   );

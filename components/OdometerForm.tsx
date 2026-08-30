@@ -34,7 +34,7 @@ export function OdometerForm({
           type="number"
           step={1}
           defaultValue={currentKm}
-          className="h-11 w-40 rounded-lg border border-border bg-surface px-3 font-mono text-sm tabular-nums"
+          className="h-11 w-40 rounded-lg border border-border bg-surface px-3 nums text-sm"
         />
         <Button type="submit" variant="primary" disabled={pending}>
           {pending && (

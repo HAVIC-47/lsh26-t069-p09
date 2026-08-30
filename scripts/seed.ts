@@ -46,14 +46,34 @@ const check = (label: string, error: { message: string } | null) => {
  * submission holding no real customer data; the README states the credentials
  * openly so a judge can sign in as each role.
  */
-const DEMO_PASSWORD = "ServiceDue!2026";
+const DEMO_PASSWORD = "RideCatalyst!2026";
 
 const DEMO_USERS = [
-  { email: "admin@servicedue.demo",   full_name: "Ayesha Rahman", role: "admin"      },
-  { email: "manager@servicedue.demo", full_name: "Tanvir Hasan",  role: "manager"    },
-  { email: "tech@servicedue.demo",    full_name: "Sabbir Alam",   role: "technician" },
-  { email: "owner@servicedue.demo",   full_name: "",              role: "customer"   },
+  { email: "admin@ridecatalyst.demo",   full_name: "Ayesha Rahman", role: "admin"      },
+  { email: "manager@ridecatalyst.demo", full_name: "Tanvir Hasan",  role: "manager"    },
+  { email: "tech@ridecatalyst.demo",    full_name: "Sabbir Alam",   role: "technician" },
+  { email: "owner@ridecatalyst.demo",   full_name: "",              role: "customer"   },
 ] as const;
+
+/**
+ * Deletes every demo auth user, which cascades their profile rows.
+ *
+ * Must run BEFORE the owners table is cleared: `profiles.owner_id` is
+ * ON DELETE SET NULL, but `profiles` also requires a customer to have an
+ * owner_id, so removing an owner while a customer profile points at it
+ * violates that check and blocks the delete.
+ */
+async function clearUsers() {
+  const { data } = await db.auth.admin.listUsers();
+  for (const u of data?.users ?? []) {
+    if (u.email && DEMO_USERS.some((d) => d.email === u.email)) {
+      await db.auth.admin.deleteUser(u.id);
+    }
+  }
+  // Any other profile (e.g. a self-signed-up customer) would block the wipe too.
+  await db.from("profiles").delete().eq("role", "customer");
+  console.log("✓ cleared existing accounts");
+}
 
 async function seedWorkshop(cc: WorkshopCase) {
   // Children first — everything cascades from vehicles and owners.
@@ -134,13 +154,8 @@ async function seedUsers(cc: WorkshopCase) {
     cc.vehicles.some((v) => v.owner_id === o.id)
   )!;
 
-  const { data: existing } = await db.auth.admin.listUsers();
-
   for (const u of DEMO_USERS) {
     const email = u.email;
-    const prior = existing?.users.find((x) => x.email === email);
-    if (prior) await db.auth.admin.deleteUser(prior.id);
-
     const { data, error } = await db.auth.admin.createUser({
       email,
       password: DEMO_PASSWORD,
@@ -173,6 +188,7 @@ async function seedUsers(cc: WorkshopCase) {
 
 async function main() {
   const cc = c!;
+  await clearUsers();
   await seedWorkshop(cc);
   const demoOwner = await seedUsers(cc);
 

@@ -1,3 +1,5 @@
+export type Role = "admin" | "manager" | "technician" | "customer";
+
 export type Rule = "fixed_date" | "period_months" | "distance_km";
 
 export type Owner = { id: string; name: string; phone: string };

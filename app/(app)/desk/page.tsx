@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, Clock, PhoneCall, Wallet, Search, Info } from "lucide-react";
 import { loadCase } from "@/lib/data";
+import { can, requireRole } from "@/lib/auth";
 import { analyse, buildCallList, SOON_DAYS } from "@/lib/engine";
 import { PRIORITY_RULE } from "@/lib/scoring";
 import { reminderMessage, whatsappLink } from "@/lib/messages";
@@ -28,6 +29,8 @@ export default async function CallDeskPage({ searchParams }: PageProps<"/desk">)
   const q = (typeof params.q === "string" ? params.q : "").trim();
   const needle = q.toLowerCase();
 
+  await requireRole("viewCallDesk");
+  const canRemind = await can("sendReminders");
   const workshop = await loadCase();
   const rows = analyse(workshop);
   // No call history yet — every customer scores as never contacted, which is
@@ -169,17 +172,17 @@ export default async function CallDeskPage({ searchParams }: PageProps<"/desk">)
               <li
                 key={e.vehicleId}
                 data-reveal
-                className="overflow-hidden rounded-xl border border-border bg-surface shadow-[var(--shadow-sm)]"
+                className="overflow-hidden rounded-2xl border border-border bg-surface"
               >
                 <div className="flex flex-wrap items-start gap-3 border-b border-border px-4 py-3">
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-soft font-mono text-xs font-semibold text-primary tabular-nums">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft nums text-xs font-semibold text-accent ">
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="font-medium">{e.ownerName}</div>
                     <a
                       href={`tel:${e.ownerPhone}`}
-                      className="font-mono text-sm text-primary hover:underline"
+                      className="nums text-sm text-accent hover:underline"
                     >
                       {e.ownerPhone}
                     </a>
@@ -187,14 +190,14 @@ export default async function CallDeskPage({ searchParams }: PageProps<"/desk">)
                   <div className="min-w-0 text-sm sm:text-right">
                     <Link
                       href={`/vehicles/${e.vehicleId}`}
-                      className="font-medium transition-colors duration-200 hover:text-primary"
+                      className="font-medium transition-colors duration-200 hover:text-accent"
                     >
                       {e.plate}
                     </Link>
                     <div className="text-muted">{e.model}</div>
                   </div>
                   <div className="text-sm sm:min-w-24 sm:text-right">
-                    <div className="font-mono font-semibold tabular-nums">
+                    <div className="nums font-semibold">
                       {taka(e.totalCost)}
                     </div>
                     <div className="text-muted">
@@ -205,7 +208,7 @@ export default async function CallDeskPage({ searchParams }: PageProps<"/desk">)
                     className="text-sm sm:min-w-20 sm:text-right"
                     title={PRIORITY_RULE}
                   >
-                    <div className="font-mono font-semibold text-accent tabular-nums">
+                    <div className="nums font-semibold text-accent ">
                       {e.priority}
                     </div>
                     <div className="text-muted">priority</div>
@@ -218,10 +221,10 @@ export default async function CallDeskPage({ searchParams }: PageProps<"/desk">)
                       <div className="flex flex-wrap items-baseline gap-2">
                         <span className="text-sm font-medium">{it.itemName}</span>
                         <StatusBadge status={it.status} daysUntil={it.daysUntil} />
-                        <span className="font-mono text-xs text-muted">
+                        <span className="nums text-xs text-muted">
                           {formatDate(it.due)}
                         </span>
-                        <span className="ml-auto font-mono text-sm tabular-nums">
+                        <span className="ml-auto nums text-sm">
                           {taka(it.cost)}
                         </span>
                       </div>
@@ -230,6 +233,7 @@ export default async function CallDeskPage({ searchParams }: PageProps<"/desk">)
                   ))}
                 </ul>
 
+                {canRemind && (
                 <div className="flex flex-wrap items-center gap-2 border-t border-border bg-surface-2/50 px-4 py-2.5">
                   <ReminderPanel
                     ownerName={e.ownerName}
@@ -269,6 +273,7 @@ export default async function CallDeskPage({ searchParams }: PageProps<"/desk">)
                     )}
                   />
                 </div>
+                )}
               </li>
             ))}
           </ol>

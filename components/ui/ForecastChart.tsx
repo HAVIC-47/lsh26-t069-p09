@@ -39,7 +39,7 @@ export function ForecastChart({
             y1={padTop + plot}
             x2={W - padX}
             y2={padTop + plot}
-            stroke="var(--border-strong)"
+            stroke="var(--border)"
             strokeWidth="1"
           />
 
@@ -60,15 +60,15 @@ export function ForecastChart({
                   width={barW}
                   height={h}
                   rx="4"
-                  fill={isPeak ? "var(--accent)" : "var(--secondary)"}
+                  fill={isPeak ? "var(--accent)" : "var(--chart-bar)"}
                 />
                 <text
                   x={x + barW / 2}
                   y={y - 7}
                   textAnchor="middle"
-                  className="font-mono"
+                  className="nums"
                   fontSize="11"
-                  fill="var(--muted)"
+                  fill="var(--faint)"
                 >
                   {b.revenue > 0 ? Math.round(b.revenue / 1000) + "k" : ""}
                 </text>
@@ -77,7 +77,7 @@ export function ForecastChart({
                   y={padTop + plot + 16}
                   textAnchor="middle"
                   fontSize="11"
-                  fill="var(--muted)"
+                  fill="var(--faint)"
                 >
                   w{b.index}
                 </text>
@@ -85,9 +85,9 @@ export function ForecastChart({
                   x={x + barW / 2}
                   y={padTop + plot + 30}
                   textAnchor="middle"
-                  className="font-mono"
+                  className="nums"
                   fontSize="10"
-                  fill="var(--muted)"
+                  fill="var(--faint)"
                 >
                   {b.vehicles}v
                 </text>
@@ -115,11 +115,11 @@ export function ForecastChart({
               {buckets.map((b) => (
                 <tr key={b.index}>
                   <td className="py-1 pr-3">w{b.index}</td>
-                  <td className="py-1 pr-3 font-mono">{formatDate(b.start)}</td>
-                  <td className="py-1 pr-3 text-right font-mono tabular-nums">
+                  <td className="py-1 pr-3 nums">{formatDate(b.start)}</td>
+                  <td className="py-1 pr-3 text-right nums">
                     {b.vehicles}
                   </td>
-                  <td className="py-1 text-right font-mono tabular-nums">
+                  <td className="py-1 text-right nums">
                     {taka(b.revenue)}
                   </td>
                 </tr>

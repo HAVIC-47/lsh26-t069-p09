@@ -10,6 +10,7 @@ import {
   Phone,
 } from "lucide-react";
 import { loadCase } from "@/lib/data";
+import { can, requireUser } from "@/lib/auth";
 import { analyse, dailyRun } from "@/lib/engine";
 import { formatDate } from "@/lib/dates";
 import { km as fmtKm, taka } from "@/lib/format";
@@ -31,6 +32,11 @@ const RULE_LABEL: Record<string, string> = {
 
 export default async function VehiclePage({ params }: PageProps<"/vehicles/[id]">) {
   const { id } = await params;
+  await requireUser();
+  const showMoney = await can("viewMoney");
+  const canRecord = await can("recordService");
+  const canOdometer = await can("updateOdometer");
+
   const workshop = await loadCase();
   const vehicle = workshop.vehicles.find((v) => v.id === id);
   if (!vehicle) notFound();
@@ -54,13 +60,13 @@ export default async function VehiclePage({ params }: PageProps<"/vehicles/[id]"
     <div className="space-y-5">
       <header>
         <Link
-          href="/desk"
-          className="inline-flex items-center gap-1.5 text-sm text-primary transition-colors duration-200 hover:underline"
+          href="/vehicles"
+          className="inline-flex items-center gap-1.5 text-sm text-accent transition-colors duration-200 hover:underline"
         >
           <ArrowLeft className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          Call Desk
+          All vehicles
         </Link>
-        <h1 className="mt-2 font-mono text-2xl font-semibold tracking-tight">
+        <h1 className="mt-2 nums text-2xl font-semibold tracking-tight">
           {vehicle.plate}
         </h1>
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted">
@@ -77,7 +83,7 @@ export default async function VehiclePage({ params }: PageProps<"/vehicles/[id]"
               </span>
               <a
                 href={`tel:${owner.phone}`}
-                className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                className="inline-flex items-center gap-1 nums text-accent hover:underline"
               >
                 <Phone className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
                 {owner.phone}
@@ -106,13 +112,15 @@ export default async function VehiclePage({ params }: PageProps<"/vehicles/[id]"
           tone="overdue"
           icon={AlertTriangle}
         />
-        <KpiCard
-          label="Work waiting"
-          value={dueValue}
-          format="taka"
-          tone="accent"
-          icon={Wallet}
-        />
+        {showMoney && (
+          <KpiCard
+            label="Work waiting"
+            value={dueValue}
+            format="taka"
+            tone="accent"
+            icon={Wallet}
+          />
+        )}
       </Reveal>
 
       <Card padded={false}>
@@ -127,16 +135,20 @@ export default async function VehiclePage({ params }: PageProps<"/vehicles/[id]"
                 <span className="text-sm font-medium">{it.itemName}</span>
                 <Tag>{RULE_LABEL[it.rule]}</Tag>
                 <StatusBadge status={it.status} daysUntil={it.daysUntil} />
-                <span className="font-mono text-xs text-muted">
+                <span className="nums text-xs text-muted">
                   {formatDate(it.due)}
                 </span>
                 <span className="ml-auto flex items-center gap-3">
-                  <span className="font-mono text-sm tabular-nums">{taka(it.cost)}</span>
-                  <RecordServiceForm
-                    vehicleId={vehicle.id}
-                    itemName={it.itemName}
-                    rule={it.rule}
-                  />
+                  {showMoney && (
+                    <span className="nums text-sm">{taka(it.cost)}</span>
+                  )}
+                  {canRecord && (
+                    <RecordServiceForm
+                      vehicleId={vehicle.id}
+                      itemName={it.itemName}
+                      rule={it.rule}
+                    />
+                  )}
                 </span>
               </div>
               <p className="mt-1 text-xs text-muted">{it.basis}</p>
@@ -161,15 +173,17 @@ export default async function VehiclePage({ params }: PageProps<"/vehicles/[id]"
                   className="flex items-baseline gap-2 px-4 py-2 text-sm"
                 >
                   <span className="font-medium">{h.item}</span>
-                  <span className="font-mono text-xs text-muted">
+                  <span className="nums text-xs text-muted">
                     {formatDate(h.date)}
                   </span>
                   {h.km != null && (
-                    <span className="font-mono text-xs text-muted">{fmtKm(h.km)}</span>
+                    <span className="nums text-xs text-muted">{fmtKm(h.km)}</span>
                   )}
-                  <span className="ml-auto font-mono tabular-nums">
-                    {taka(parseFloat(h.cost_bdt))}
-                  </span>
+                  {showMoney && (
+                    <span className="ml-auto nums">
+                      {taka(parseFloat(h.cost_bdt))}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -182,8 +196,14 @@ export default async function VehiclePage({ params }: PageProps<"/vehicles/[id]"
             hint="Re-derives daily running for every distance-based estimate"
           />
           <div className="space-y-3 px-4 py-3">
-            <OdometerForm vehicleId={vehicle.id} currentKm={last.km} />
-            <ul className="space-y-1 pt-1 font-mono text-xs text-muted">
+            {canOdometer ? (
+              <OdometerForm vehicleId={vehicle.id} currentKm={last.km} />
+            ) : (
+              <p className="text-xs text-muted">
+                Odometer readings are taken by workshop staff.
+              </p>
+            )}
+            <ul className="space-y-1 pt-1 nums text-xs text-muted">
               {[...vehicle.odometer_readings]
                 .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
                 .slice(0, 5)

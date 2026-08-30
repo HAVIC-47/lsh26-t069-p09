@@ -73,7 +73,7 @@ export async function addReadingAction(
   formData: FormData
 ): Promise<ActionState> {
   try {
-    await requirePermission("recordOdometer");
+    await requirePermission("updateOdometer");
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Not permitted." };
   }

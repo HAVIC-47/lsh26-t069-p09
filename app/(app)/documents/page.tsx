@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileText, ShieldAlert, CalendarClock, Phone, Info } from "lucide-react";
 import { loadCase } from "@/lib/data";
+import { requireRole } from "@/lib/auth";
 import { analyse } from "@/lib/engine";
 import { formatDate } from "@/lib/dates";
 import { taka } from "@/lib/format";
@@ -20,6 +21,7 @@ export const dynamic = "force-dynamic";
 const DOCUMENT_WARNING_DAYS = 30;
 
 export default async function DocumentsPage() {
+  await requireRole("viewFinancials");
   const workshop = await loadCase();
 
   // Only fixed-date items are legal paperwork; a distance-based brake pad is
@@ -106,7 +108,7 @@ export default async function DocumentsPage() {
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/vehicles/${d.vehicleId}`}
-                        className="font-mono text-xs transition-colors duration-200 hover:text-primary"
+                        className="nums text-xs transition-colors duration-200 hover:text-accent"
                       >
                         {d.plate}
                       </Link>
@@ -116,19 +118,19 @@ export default async function DocumentsPage() {
                       {d.ownerName}
                       <a
                         href={`tel:${d.ownerPhone}`}
-                        className="flex items-center gap-1 font-mono text-xs text-primary hover:underline"
+                        className="flex items-center gap-1 nums text-xs text-accent hover:underline"
                       >
                         <Phone className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                         {d.ownerPhone}
                       </a>
                     </td>
-                    <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap">
+                    <td className="px-4 py-2.5 nums text-xs whitespace-nowrap">
                       {formatDate(d.due)}
                     </td>
                     <td className="px-4 py-2.5">
                       <StatusBadge status={d.status} daysUntil={d.daysUntil} />
                     </td>
-                    <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                    <td className="px-4 py-2.5 text-right nums">
                       {taka(d.cost)}
                     </td>
                   </tr>

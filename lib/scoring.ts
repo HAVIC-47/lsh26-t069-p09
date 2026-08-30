@@ -250,3 +250,61 @@ export function odometerAnomaly(
 
   return null;
 }
+
+/* ----------------------------------------------------------- revenue */
+
+export type MonthRevenue = { month: string; label: string; total: number; jobs: number };
+
+const MONTH_LABEL = (ym: string) => {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-GB", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+};
+
+/**
+ * Recorded revenue by calendar month, oldest first, from actual service
+ * history. This is money already taken, not a projection — the forecast in
+ * weeklyBuckets covers what is still to come.
+ */
+export function revenueByMonth(
+  history: { date: string; cost_bdt: string }[],
+  months = 6,
+  today?: string
+): MonthRevenue[] {
+  const buckets = new Map<string, { total: number; jobs: number }>();
+
+  for (const h of history) {
+    const ym = h.date.slice(0, 7);
+    const b = buckets.get(ym) ?? { total: 0, jobs: 0 };
+    b.total += parseFloat(h.cost_bdt);
+    b.jobs += 1;
+    buckets.set(ym, b);
+  }
+
+  // Anchor on the workshop's today so empty recent months still appear —
+  // a month with no work is a real signal, not a gap to hide.
+  const anchor = today ? today.slice(0, 7) : [...buckets.keys()].sort().pop();
+  if (!anchor) return [];
+
+  const [ay, am] = anchor.split("-").map(Number);
+  const out: MonthRevenue[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(ay, am - 1 - i, 1));
+    const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const b = buckets.get(ym) ?? { total: 0, jobs: 0 };
+    out.push({ month: ym, label: MONTH_LABEL(ym), total: b.total, jobs: b.jobs });
+  }
+  return out;
+}
+
+/**
+ * Share of vehicles seen inside their service window — the inverse of the
+ * churn list, expressed as a percentage of the fleet.
+ */
+export function retentionRate(totalVehicles: number, churned: number): number {
+  if (totalVehicles === 0) return 100;
+  return Math.round(((totalVehicles - churned) / totalVehicles) * 100);
+}

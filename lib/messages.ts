@@ -2,7 +2,7 @@ import type { DueItem } from "./types";
 
 export type Language = "en" | "bn";
 
-export const WORKSHOP_NAME = "ServiceDue Auto Care, Dhaka";
+export const WORKSHOP_NAME = "Ride Catalyst Auto Care, Dhaka";
 
 /**
  * The dataset carries a fixed set of twelve item names, so these are the only

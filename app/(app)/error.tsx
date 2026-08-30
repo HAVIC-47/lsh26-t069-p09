@@ -11,7 +11,7 @@ export default function Error({
   reset: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-surface px-6 py-12 text-center">
+    <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center">
       <TriangleAlert
         className="mx-auto mb-3 h-6 w-6 text-overdue"
         strokeWidth={1.5}

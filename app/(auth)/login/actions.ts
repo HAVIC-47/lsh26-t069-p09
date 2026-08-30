@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createSessionClient, hasAuth } from "@/lib/supabase/server";
+import { currentProfile, ROLE_HOME } from "@/lib/auth";
 
 export type LoginState = { message: string } | null;
 
@@ -29,7 +30,10 @@ export async function signInAction(
   if (error) return { message: error.message };
 
   revalidatePath("/", "layout");
-  redirect("/desk");
+
+  // Each role has its own home; there is no shared landing screen.
+  const profile = await currentProfile();
+  redirect(profile ? ROLE_HOME[profile.role] : "/");
 }
 
 export async function signOutAction() {

@@ -1,369 +1,357 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
-  Wrench,
   ArrowRight,
   CalendarClock,
   Gauge,
-  FileCheck2,
-  ListOrdered,
-  MessageCircle,
-  ChartColumnBig,
+  LayoutDashboard,
+  Warehouse,
+  Car,
   ShieldCheck,
-  Phone,
+  Wrench,
+  BookOpen,
+  PhoneOff,
+  Receipt,
 } from "lucide-react";
-import { loadCase } from "@/lib/data";
-import { analyse, buildCallList, dailyRun } from "@/lib/engine";
-import { weeklyBuckets } from "@/lib/scoring";
-import { taka } from "@/lib/format";
-import { formatDate } from "@/lib/dates";
-import { StatusBadge } from "@/components/ui/Badge";
+import { currentProfile, ROLE_HOME } from "@/lib/auth";
+import { hasAuth } from "@/lib/supabase/server";
+import { Wordmark } from "@/components/brand/Monogram";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { SiteFooter } from "@/components/ui/SiteFooter";
+import { PartsOrbit } from "@/components/landing/PartsOrbit";
 import { HeroMotion } from "@/components/landing/HeroMotion";
 import { ScrollReveal } from "@/components/motion/ScrollReveal";
-import { CountUp } from "@/components/motion/CountUp";
 
 export const dynamic = "force-dynamic";
+
+const PROBLEMS = [
+  {
+    icon: BookOpen,
+    title: "The register is a book",
+    body: "Service intervals live on paper and in the manager's head. Nothing surfaces until someone remembers to look.",
+  },
+  {
+    icon: PhoneOff,
+    title: "Nobody calls first",
+    body: "The workshop finds out something was due when the customer arrives with a problem, not before.",
+  },
+  {
+    icon: Receipt,
+    title: "The customer pays for the delay",
+    body: "A missed oil change becomes engine work. An expired fitness certificate becomes a traffic fine.",
+  },
+];
 
 const RULES = [
   {
     icon: CalendarClock,
+    n: "01",
     title: "Fixed expiry",
     items: "Insurance · Fitness · Tax token · Battery warranty",
     body: "A printed date on a document. It does not care how far the car is driven, and it carries a fine, not just a repair bill.",
   },
   {
     icon: Wrench,
+    n: "02",
     title: "Time interval",
     items: "Engine oil · Air filter · Coolant · AC service",
     body: "Counted in months from the last service, clamped to the end of a short month so a February job never slides into March.",
   },
   {
     icon: Gauge,
+    n: "03",
     title: "Distance interval",
     items: "Brake pads · Tyres · Spark plugs · Timing belt",
-    body: "Counted in kilometres, then converted to a date using that one vehicle's measured daily running. No two cars get the same answer.",
+    body: "Counted in kilometres, then turned into a date using that one vehicle's measured daily running. No two cars get the same answer.",
   },
 ];
 
-const FEATURES = [
+const ROLES = [
   {
-    icon: ListOrdered,
-    title: "A ranked call list, not a dump",
-    body: "Every vehicle gets a priority score: 100 per overdue item, 25 per due-soon, one per 500 taka of pending work, plus a bonus when nobody has called in a week. The formula is printed on the page.",
+    icon: LayoutDashboard,
+    role: "Workshop Admin",
+    email: "admin@ridecatalyst.demo",
+    body: "Revenue month on month, projected earnings, retention. Manages staff accounts and the service catalogue.",
   },
   {
-    icon: MessageCircle,
-    title: "Reminders in English or বাংলা",
-    body: "A message built from that vehicle's real due items and costs, with Bangla numerals, one click to copy or to open WhatsApp with the customer's number already filled in.",
+    icon: Wrench,
+    role: "Workshop Manager",
+    email: "manager@ridecatalyst.demo",
+    body: "The daily call desk, ranked by what is overdue and what it is worth. Logs calls, sends reminders, records work.",
   },
   {
-    icon: ChartColumnBig,
-    title: "Eight weeks of workload ahead",
-    body: "Upcoming work bucketed by week with the parts each week needs, so the busy weeks are visible before they arrive. The overdue backlog is counted separately so it cannot inflate week one.",
+    icon: Warehouse,
+    role: "Service Technician",
+    email: "tech@ridecatalyst.demo",
+    body: "Today's bay queue on a tablet. Logs odometer readings at intake and runs inspections. No prices — not their job.",
   },
   {
-    icon: FileCheck2,
-    title: "Paperwork before it costs a fine",
-    body: "Insurance, fitness, tax token and battery warranty get a wider 30-day warning window than a mechanical service, because the consequence is different.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Four roles, enforced twice",
-    body: "Row-level security in Postgres and a permission check in every server action. A customer signing in sees only their own vehicles — verified, not assumed.",
-  },
-  {
-    icon: Phone,
-    title: "Reasoning on every date",
-    body: "Not just \"due 1 Sept\" but \"due at 139,498 km, now 139,372 km, so 126 km left at 51.9 km/day\". Every figure traces to that vehicle's own history.",
+    icon: Car,
+    role: "Vehicle Owner",
+    email: "owner@ridecatalyst.demo",
+    body: "Their own garage and nothing else: a health score per car, what is due, past invoices, and a booking request.",
   },
 ];
 
 export default async function LandingPage() {
-  const workshop = await loadCase();
-  const rows = analyse(workshop);
-  const calls = buildCallList(rows, workshop.today);
-  const forecast = weeklyBuckets(rows, workshop.today, 8);
-
-  const overdue = rows.filter((r) => r.status === "overdue");
-  const soon = rows.filter((r) => r.status === "due_soon");
-  const atRisk = [...overdue, ...soon].reduce((n, r) => n + r.cost, 0);
-  const rates = workshop.vehicles.map((v) => dailyRun(v).rate);
-  const preview = calls.slice(0, 3);
+  // A signed-in user has no reason to see the pitch; send them to their desk.
+  const profile = await currentProfile();
+  if (profile) redirect(ROLE_HOME[profile.role]);
 
   return (
-    <div className="min-h-dvh">
-      <header className="sticky top-0 z-20 border-b border-border bg-surface/85 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight text-heading">
-            <Wrench className="h-5 w-5 text-primary" strokeWidth={2.2} aria-hidden="true" />
-            Service<span className="-ml-2 text-primary">Due</span>
+    <div className="flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-20 border-b border-border bg-surface/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1400px] items-center gap-4 px-4 py-2.5 lg:px-6">
+          <Link href="/">
+            <Wordmark size={26} />
           </Link>
-          <nav className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
+            <Link
+              href="/signup"
+              className="hidden h-9 cursor-pointer items-center rounded-full px-3 text-[13px] font-medium whitespace-nowrap text-muted transition-colors duration-200 hover:bg-surface-2 hover:text-text sm:flex"
+            >
+              Create account
+            </Link>
             <Link
               href="/login"
-              className="flex h-10 cursor-pointer items-center rounded-lg px-3 text-sm font-medium text-muted transition-colors duration-200 hover:bg-surface-2 hover:text-text"
+              className="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-medium whitespace-nowrap text-on-primary transition-opacity duration-200 hover:opacity-88"
             >
               Sign in
+              <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             </Link>
-            <Link
-              href="/desk"
-              className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-medium whitespace-nowrap text-white transition-colors duration-200 hover:opacity-90"
-            >
-              Open the Call Desk
-              <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-            </Link>
-          </nav>
+          </div>
         </div>
       </header>
 
-      {/* ---------------------------------------------------------- hero */}
-      <section className="relative overflow-hidden border-b border-border">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_50%_0%,var(--primary-soft),transparent_70%)]"
-        />
-        <HeroMotion>
-          <div className="relative mx-auto max-w-4xl px-4 py-14 text-center sm:py-20">
-            <p
-              data-hero
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-muted"
-            >
-              LofiStack Hackathon 2026 · Problem P09 · Team T069
-            </p>
+      <main className="flex-1">
+        {/* ------------------------------------------------------- hero */}
+        <section className="relative overflow-hidden border-b border-border">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_60%_at_75%_0%,var(--accent-soft),transparent_65%)]"
+          />
+          <HeroMotion>
+            <div className="relative mx-auto grid max-w-[1400px] items-center gap-12 px-4 py-16 lg:grid-cols-[1.05fr_1fr] lg:px-6 lg:py-24">
+              <div>
+                <p data-hero className="eyebrow">
+                  LofiStack Hackathon 2026 · Problem P09 · Team T069
+                </p>
 
-            <h1
-              data-hero
-              className="mt-5 text-4xl font-bold tracking-tight text-balance sm:text-5xl"
-            >
-              Know what is due{" "}
-              <span className="text-primary">before the customer does</span>.
-            </h1>
-
-            <p
-              data-hero
-              className="mx-auto mt-4 max-w-2xl text-base text-muted text-pretty sm:text-lg"
-            >
-              A Dhaka workshop keeps its service register in a book and in the
-              manager&rsquo;s head, so it finds out something was due only when the
-              customer turns up with a problem. ServiceDue dates every part on
-              every vehicle by its own rule, and says who to call today.
-            </p>
-
-            <div data-hero className="mt-7 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/desk"
-                className="flex h-12 cursor-pointer items-center gap-2 rounded-lg bg-primary px-5 font-medium text-white transition-colors duration-200 hover:opacity-90"
-              >
-                Open the Call Desk
-                <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-              </Link>
-              <Link
-                href="/login"
-                className="flex h-12 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface px-5 font-medium transition-colors duration-200 hover:border-primary hover:text-primary"
-              >
-                Sign in as a role
-              </Link>
-            </div>
-
-            <p data-hero className="mt-3 text-xs text-muted">
-              No account needed to look around — the workshop is readable signed out.
-            </p>
-
-            {/* Live figures from the seeded workshop, not marketing numbers. */}
-            <dl
-              data-hero
-              className="mx-auto mt-10 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4"
-            >
-              {[
-                { label: "Vehicles tracked", value: workshop.vehicles.length, format: "number" as const, tone: "text-text" },
-                { label: "Items overdue", value: overdue.length, format: "number" as const, tone: "text-overdue" },
-                { label: "Due within 30 days", value: soon.length, format: "number" as const, tone: "text-soon" },
-                { label: "Revenue at risk", value: atRisk, format: "taka" as const, tone: "text-accent" },
-              ].map((s) => (
-                <div
-                  key={s.label}
-                  className="rounded-xl border border-border bg-surface px-3 py-3 shadow-[var(--shadow-sm)]"
+                <h1
+                  data-hero
+                  className="mt-5 text-[40px] leading-[1.05] text-balance sm:text-[54px]"
                 >
-                  <dd className={`font-mono text-2xl font-semibold tabular-nums ${s.tone}`}>
-                    <CountUp value={s.value} format={s.format} />
-                  </dd>
-                  <dt className="mt-0.5 text-xs text-muted">{s.label}</dt>
+                  Know what is due
+                  <br />
+                  <span className="text-accent italic">before</span> the customer does.
+                </h1>
+
+                <p
+                  data-hero
+                  className="mt-6 max-w-xl text-[15px] leading-relaxed text-muted text-pretty sm:text-base"
+                >
+                  Ride Catalyst dates every part on every customer vehicle by its
+                  own rule — a printed expiry, elapsed months, or distance
+                  travelled — and turns that into a ranked list of who a Dhaka
+                  workshop should call today.
+                </p>
+
+                <div data-hero className="mt-8 flex flex-wrap gap-3">
+                  <Link
+                    href="/login"
+                    className="flex h-12 cursor-pointer items-center gap-2 rounded-full bg-primary px-6 text-sm font-medium text-on-primary transition-opacity duration-200 hover:opacity-88"
+                  >
+                    Sign in to the workshop
+                    <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="flex h-12 cursor-pointer items-center gap-2 rounded-full border border-border bg-surface px-6 text-sm font-medium transition-colors duration-200 hover:border-border-strong hover:bg-surface-2"
+                  >
+                    I own a vehicle here
+                  </Link>
                 </div>
-              ))}
-            </dl>
-            <p data-hero className="mt-2 text-xs text-muted">
-              Live from the seeded workshop, measured against{" "}
-              {formatDate(workshop.today)}.
-            </p>
-          </div>
-        </HeroMotion>
-      </section>
 
-      {/* --------------------------------------------------- three rules */}
-      <section className="border-b border-border">
-        <div className="mx-auto max-w-6xl px-4 py-14">
-          <ScrollReveal>
-            <div data-reveal className="max-w-2xl">
-              <h2 className="text-2xl font-semibold tracking-tight">
-                Every part wears out on its own clock
-              </h2>
-              <p className="mt-2 text-muted">
-                One interval applied to everything is how workshops get this wrong.
-                Three rules, three different calculations.
-              </p>
+                <p data-hero className="mt-4 text-xs text-faint">
+                  Workshop data is visible only after signing in. Demo accounts below.
+                </p>
+              </div>
+
+              <div data-hero>
+                <PartsOrbit />
+              </div>
             </div>
+          </HeroMotion>
+        </section>
 
-            <div className="mt-8 grid gap-4 md:grid-cols-3">
-              {RULES.map(({ icon: Icon, title, items, body }) => (
-                <div
-                  key={title}
-                  data-reveal
-                  className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-sm)]"
-                >
-                  <Icon className="h-5 w-5 text-primary" strokeWidth={2} aria-hidden="true" />
-                  <h3 className="mt-3 font-semibold">{title}</h3>
-                  <p className="mt-1 font-mono text-xs text-muted">{items}</p>
-                  <p className="mt-2.5 text-sm text-muted">{body}</p>
-                </div>
-              ))}
-            </div>
-
-            <p data-reveal className="mt-5 text-sm text-muted">
-              Across this workshop, measured daily running spans{" "}
-              <span className="font-mono text-text">
-                {Math.min(...rates).toFixed(0)}–{Math.max(...rates).toFixed(0)} km/day
-              </span>
-              , so two vehicles with identical brake pads get different due dates.
-            </p>
-          </ScrollReveal>
-        </div>
-      </section>
-
-      {/* ------------------------------------------------- live call desk */}
-      <section className="border-b border-border bg-surface-2/40">
-        <div className="mx-auto max-w-6xl px-4 py-14">
-          <ScrollReveal>
-            <div data-reveal className="max-w-2xl">
-              <h2 className="text-2xl font-semibold tracking-tight">
-                Today&rsquo;s three most urgent calls
-              </h2>
-              <p className="mt-2 text-muted">
-                Straight from the live engine — the same rows the workshop sees,
-                each with the reasoning that produced the date.
-              </p>
-            </div>
-
-            <ol className="mt-6 space-y-3">
-              {preview.map((e, i) => (
-                <li
-                  key={e.vehicleId}
-                  data-reveal
-                  className="overflow-hidden rounded-xl border border-border bg-surface shadow-[var(--shadow-sm)]"
-                >
-                  <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-soft font-mono text-xs font-semibold text-primary">
-                      {i + 1}
-                    </span>
-                    <span className="font-medium">{e.ownerName}</span>
-                    <span className="font-mono text-sm text-muted">{e.plate}</span>
-                    <span className="ml-auto flex items-center gap-4 text-sm">
-                      <span className="font-mono font-semibold tabular-nums">
-                        {taka(e.totalCost)}
-                      </span>
-                      <span className="font-mono font-semibold text-accent tabular-nums">
-                        {e.priority}
-                      </span>
-                    </span>
+        {/* ---------------------------------------------------- problem */}
+        <section className="border-b border-border">
+          <div className="mx-auto max-w-[1400px] px-4 py-16 lg:px-6">
+            <ScrollReveal>
+              <div data-reveal className="max-w-2xl">
+                <p className="eyebrow">The problem</p>
+                <h2 className="mt-3 text-[26px] sm:text-[32px]">
+                  A few hundred vehicles, tracked from memory
+                </h2>
+                <p className="mt-3 text-muted">
+                  Every vehicle has parts with their own life. Papers expire on a
+                  fixed date, oil ages by the month, brake pads wear by the
+                  kilometre. None of that fits in a register book.
+                </p>
+              </div>
+              <div className="mt-10 grid gap-5 md:grid-cols-3">
+                {PROBLEMS.map(({ icon: Icon, title, body }) => (
+                  <div key={title} data-reveal className="border-t border-border pt-5">
+                    <Icon className="h-5 w-5 text-overdue" strokeWidth={1.8} aria-hidden="true" />
+                    <h3 className="mt-3 text-[17px]">{title}</h3>
+                    <p className="mt-2 text-[13px] leading-relaxed text-muted">{body}</p>
                   </div>
-                  <ul className="divide-y divide-border">
-                    {e.items.slice(0, 2).map((it) => (
-                      <li key={it.itemName} className="px-4 py-2.5">
-                        <div className="flex flex-wrap items-baseline gap-2">
-                          <span className="text-sm font-medium">{it.itemName}</span>
-                          <StatusBadge status={it.status} daysUntil={it.daysUntil} />
-                        </div>
-                        <p className="mt-1 text-xs text-muted">{it.basis}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ol>
+                ))}
+              </div>
+            </ScrollReveal>
+          </div>
+        </section>
 
-            <p data-reveal className="mt-5 text-sm text-muted">
-              Next eight weeks: {forecast.buckets.reduce((n, b) => n + b.vehicles, 0)}{" "}
-              vehicle visits worth{" "}
-              <span className="font-mono text-text">
-                {taka(forecast.buckets.reduce((n, b) => n + b.revenue, 0))}
-              </span>
-              , peaking in week {forecast.buckets.reduce((a, b) => (b.revenue > a.revenue ? b : a)).index}.
-            </p>
-          </ScrollReveal>
-        </div>
-      </section>
+        {/* ------------------------------------------------ three rules */}
+        <section className="border-b border-border bg-surface-2/40">
+          <div className="mx-auto max-w-[1400px] px-4 py-16 lg:px-6">
+            <ScrollReveal>
+              <div data-reveal className="max-w-2xl">
+                <p className="eyebrow">How it dates things</p>
+                <h2 className="mt-3 text-[26px] sm:text-[32px]">
+                  Every part wears out on its own clock
+                </h2>
+                <p className="mt-3 text-muted">
+                  One interval applied to everything is how workshops get this
+                  wrong. Three rules, three different calculations — and for
+                  distance items, the answer depends on how far that specific car
+                  actually runs per day.
+                </p>
+              </div>
 
-      {/* ----------------------------------------------------- features */}
-      <section className="border-b border-border">
-        <div className="mx-auto max-w-6xl px-4 py-14">
-          <ScrollReveal>
-            <h2 data-reveal className="text-2xl font-semibold tracking-tight">
-              What the workshop gets
-            </h2>
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {FEATURES.map(({ icon: Icon, title, body }) => (
-                <div
-                  key={title}
-                  data-reveal
-                  className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-sm)]"
+              <div className="mt-10 grid gap-5 md:grid-cols-3">
+                {RULES.map(({ icon: Icon, n, title, items, body }) => (
+                  <div
+                    key={title}
+                    data-reveal
+                    className="rounded-2xl border border-border bg-surface p-6 transition-colors duration-200 hover:border-border-strong"
+                  >
+                    <div className="flex items-center justify-between">
+                      <Icon className="h-5 w-5 text-accent" strokeWidth={1.8} aria-hidden="true" />
+                      <span className="nums font-display text-2xl text-faint">{n}</span>
+                    </div>
+                    <h3 className="mt-4 text-[19px]">{title}</h3>
+                    <p className="mt-1.5 text-[11px] text-faint">{items}</p>
+                    <p className="mt-3 text-[13px] leading-relaxed text-muted">{body}</p>
+                  </div>
+                ))}
+              </div>
+
+              <p
+                data-reveal
+                className="mt-6 rounded-2xl border border-border bg-surface px-5 py-4 text-[13px] text-muted"
+              >
+                <span className="font-medium text-heading">
+                  Every date comes with its reasoning.
+                </span>{" "}
+                Not just &ldquo;due 1 September&rdquo; but{" "}
+                <span className="nums text-text">
+                  &ldquo;due at 139,498 km, now 139,372 km, so 126 km left at 51.9
+                  km/day&rdquo;
+                </span>{" "}
+                — so the person making the call can defend the number.
+              </p>
+            </ScrollReveal>
+          </div>
+        </section>
+
+        {/* ------------------------------------------------- four roles */}
+        <section className="border-b border-border">
+          <div className="mx-auto max-w-[1400px] px-4 py-16 lg:px-6">
+            <ScrollReveal>
+              <div data-reveal className="max-w-2xl">
+                <p className="eyebrow">Access</p>
+                <h2 className="mt-3 flex items-center gap-2.5 text-[26px] sm:text-[32px]">
+                  <ShieldCheck className="h-6 w-6 text-accent" strokeWidth={1.8} aria-hidden="true" />
+                  Four roles, four different products
+                </h2>
+                <p className="mt-3 text-muted">
+                  Not one dashboard with buttons greyed out. Each role signs in to
+                  its own home screen with its own navigation, and sees only the
+                  data its job needs.
+                </p>
+              </div>
+
+              <div className="mt-10 grid gap-5 sm:grid-cols-2">
+                {ROLES.map(({ icon: Icon, role, email, body }) => (
+                  <div
+                    key={role}
+                    data-reveal
+                    className="rounded-2xl border border-border bg-surface p-6 transition-colors duration-200 hover:border-border-strong"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Icon className="h-5 w-5 text-accent" strokeWidth={1.8} aria-hidden="true" />
+                      <h3 className="text-[18px]">{role}</h3>
+                    </div>
+                    <p className="mt-2.5 text-[13px] leading-relaxed text-muted">{body}</p>
+                    {hasAuth && (
+                      <Link
+                        href="/login"
+                        className="nums mt-4 inline-flex cursor-pointer items-center gap-1.5 text-xs text-accent transition-opacity duration-200 hover:opacity-75"
+                      >
+                        {email}
+                        <ArrowRight className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+                      </Link>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </ScrollReveal>
+          </div>
+        </section>
+
+        {/* -------------------------------------------------------- cta */}
+        <section>
+          <div className="mx-auto max-w-2xl px-4 py-20 text-center lg:px-6">
+            <ScrollReveal>
+              <h2 data-reveal className="text-[28px] sm:text-[36px]">
+                Sign in and look around
+              </h2>
+              {hasAuth ? (
+                <>
+                  <p data-reveal className="mx-auto mt-4 max-w-lg text-muted">
+                    Four demo accounts, one per role. Tap any of them on the sign-in
+                    page and both fields fill themselves.
+                  </p>
+                  <p data-reveal className="mx-auto mt-2 max-w-lg text-xs text-faint">
+                    Credentials are published deliberately: this is a hackathon demo
+                    holding no real customer data. Every role sees a genuinely
+                    different scope — the Vehicle Owner account cannot reach another
+                    owner&rsquo;s car.
+                  </p>
+                </>
+              ) : (
+                <p data-reveal className="mx-auto mt-4 max-w-lg text-muted">
+                  Supabase is not configured for this deployment, so sign-in is
+                  unavailable here. See the README for setup.
+                </p>
+              )}
+              <div data-reveal className="mt-8">
+                <Link
+                  href="/login"
+                  className="inline-flex h-12 cursor-pointer items-center gap-2 rounded-full bg-primary px-6 text-sm font-medium text-on-primary transition-opacity duration-200 hover:opacity-88"
                 >
-                  <Icon className="h-5 w-5 text-primary" strokeWidth={2} aria-hidden="true" />
-                  <h3 className="mt-3 font-semibold">{title}</h3>
-                  <p className="mt-2 text-sm text-muted">{body}</p>
-                </div>
-              ))}
-            </div>
-          </ScrollReveal>
-        </div>
-      </section>
+                  Sign in
+                  <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                </Link>
+              </div>
+            </ScrollReveal>
+          </div>
+        </section>
+      </main>
 
-      {/* ---------------------------------------------------------- cta */}
-      <section>
-        <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-          <ScrollReveal>
-            <h2 data-reveal className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Open it and look around
-            </h2>
-            <p data-reveal className="mx-auto mt-3 max-w-xl text-muted">
-              {workshop.vehicles.length} vehicles across {workshop.owners.length}{" "}
-              owners, every item dated and explained. Nothing to install and no
-              account required.
-            </p>
-            <div data-reveal className="mt-6 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/desk"
-                className="flex h-12 cursor-pointer items-center gap-2 rounded-lg bg-primary px-5 font-medium text-white transition-colors duration-200 hover:opacity-90"
-              >
-                Open the Call Desk
-                <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-              </Link>
-              <Link
-                href="/analytics"
-                className="flex h-12 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface px-5 font-medium transition-colors duration-200 hover:border-primary hover:text-primary"
-              >
-                See the 8-week forecast
-              </Link>
-            </div>
-          </ScrollReveal>
-        </div>
-      </section>
-
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-6 text-xs text-muted">
-          <span>Team T069 · Problem P09 · LofiStack Hackathon 2026</span>
-          <span className="ml-auto">
-            Built on the supplied public dataset — see the README for what is mocked.
-          </span>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

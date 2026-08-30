@@ -11,7 +11,7 @@ export function WorkshopDate({ today }: { today: string }) {
     <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2 py-1 text-xs text-muted">
       <CalendarDays className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
       Workshop date
-      <span className="font-mono text-text">{formatDate(today)}</span>
+      <span className="nums text-text">{formatDate(today)}</span>
     </span>
   );
 }
