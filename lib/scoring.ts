@@ -1,5 +1,5 @@
 import { addDays, daysBetween } from "./dates";
-import type { DueItem, Reading, Vehicle } from "./types";
+import type { DueItem, InspectionFlags, Reading, Vehicle } from "./types";
 
 /**
  * Local, so this module stays free of any import from engine.ts — engine.ts
@@ -15,17 +15,39 @@ function latestReading(v: Vehicle): Reading | null {
 
 /* ------------------------------------------------------------------ health */
 
-export const HEALTH_RULE =
-  "Health = (items fine + half of items due soon) ÷ total items. " +
-  "An overdue item contributes nothing, a due-soon item counts half, so a " +
-  "vehicle drifts down before it fails rather than falling off a cliff.";
+/** What a technician's findings cost a vehicle's health score. */
+export const ATTENTION_PENALTY = 4;
+export const FAIL_PENALTY = 10;
 
-/** 0–100 for one vehicle's items. A vehicle with no tracked items reads 100. */
-export function healthScore(items: DueItem[]): number {
-  if (items.length === 0) return 100;
-  const fine = items.filter((i) => i.status === "fine").length;
-  const soon = items.filter((i) => i.status === "due_soon").length;
-  return Math.round((100 * (fine + soon * 0.5)) / items.length);
+export const HEALTH_RULE =
+  "Health = (items fine + half of items due soon) ÷ total items, then " +
+  `${ATTENTION_PENALTY} points off for every inspection point needing attention ` +
+  `and ${FAIL_PENALTY} off for every one that failed. An overdue item ` +
+  "contributes nothing and a due-soon item counts half, so a vehicle drifts " +
+  "down before it fails rather than falling off a cliff. A service clears the " +
+  "inspection penalty, because the visit is taken to have addressed it.";
+
+/**
+ * 0–100 for one vehicle. A vehicle with no tracked items reads 100.
+ *
+ * `flags` come from the most recent inspection, and only when no service has
+ * happened since — see lib/data.ts, which drops them once a service supersedes
+ * the inspection.
+ */
+export function healthScore(items: DueItem[], flags?: InspectionFlags): number {
+  const base =
+    items.length === 0
+      ? 100
+      : (100 *
+          (items.filter((i) => i.status === "fine").length +
+            items.filter((i) => i.status === "due_soon").length * 0.5)) /
+        items.length;
+
+  const penalty = flags
+    ? flags.attention * ATTENTION_PENALTY + flags.fail * FAIL_PENALTY
+    : 0;
+
+  return Math.max(0, Math.min(100, Math.round(base - penalty)));
 }
 
 export const healthBand = (score: number) =>

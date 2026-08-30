@@ -87,7 +87,7 @@ export default async function ProfilePage() {
                     </p>
                   </div>
                   <span className="nums text-sm">
-                    {healthScore(items)}
+                    {healthScore(items, v.inspection)}
                     <span className="text-xs text-muted"> health</span>
                   </span>
                 </li>

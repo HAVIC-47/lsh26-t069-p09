@@ -3,7 +3,7 @@ import { cache } from "react";
 import raw from "../data/P09_vehicle_service_public.json";
 import { createSessionClient } from "./supabase/server";
 import { hasAuth } from "./supabase/config";
-import type { HistoryRow, WorkshopCase } from "./types";
+import type { HistoryRow, InspectionFlags, WorkshopCase } from "./types";
 
 const SEED = (raw as { cases: WorkshopCase[] }).cases[0];
 
@@ -68,6 +68,8 @@ export const loadCase = cache(async function loadCase(): Promise<WorkshopCase> {
     supabase.from("service_history").select("*"),
   ]);
 
+  const inspectionFlags = await latestInspectionFlags(supabase, history.data ?? []);
+
   const err = [cfg, owners, vehicles, readings, items, history].find((r) => r.error);
   if (err?.error) throw new Error(`Supabase read failed: ${err.error.message}`);
 
@@ -108,9 +110,67 @@ export const loadCase = cache(async function loadCase(): Promise<WorkshopCase> {
         km: h.km,
         cost_bdt: String(h.cost_bdt),
       })),
+      inspection: inspectionFlags.get(v.id),
     })),
   });
 });
+
+/**
+ * The most recent inspection per vehicle, expressed as counts — but only when
+ * no service has been recorded since. A visit is taken to have addressed what
+ * the inspection raised, so the health penalty lifts once work is done rather
+ * than hanging over the vehicle forever.
+ *
+ * Returns an empty map if the inspections tables are not present, so a database
+ * without the role migration still loads.
+ */
+async function latestInspectionFlags(
+  supabase: NonNullable<Awaited<ReturnType<typeof createSessionClient>>>,
+  history: { vehicle_id: string; date: string }[]
+): Promise<Map<string, InspectionFlags>> {
+  const out = new Map<string, InspectionFlags>();
+
+  const { data: inspections, error } = await supabase
+    .from("inspections")
+    .select("id, vehicle_id, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error || !inspections || inspections.length === 0) return out;
+
+  // Keep only the newest inspection per vehicle.
+  const newest = new Map<string, { id: number; date: string }>();
+  for (const i of inspections) {
+    if (!newest.has(i.vehicle_id)) {
+      newest.set(i.vehicle_id, { id: i.id, date: String(i.created_at).slice(0, 10) });
+    }
+  }
+
+  const lastService = new Map<string, string>();
+  for (const h of history) {
+    const prev = lastService.get(h.vehicle_id);
+    if (!prev || h.date > prev) lastService.set(h.vehicle_id, h.date);
+  }
+
+  const live = [...newest.entries()].filter(([vehicleId, insp]) => {
+    const serviced = lastService.get(vehicleId);
+    return !serviced || insp.date > serviced;
+  });
+  if (live.length === 0) return out;
+
+  const { data: points } = await supabase
+    .from("inspection_items")
+    .select("inspection_id, verdict")
+    .in("inspection_id", live.map(([, i]) => i.id));
+
+  for (const [vehicleId, insp] of live) {
+    const mine = (points ?? []).filter((p) => p.inspection_id === insp.id);
+    const attention = mine.filter((p) => p.verdict === "attention").length;
+    const fail = mine.filter((p) => p.verdict === "fail").length;
+    if (attention || fail) out.set(vehicleId, { attention, fail, date: insp.date });
+  }
+
+  return out;
+}
 
 /**
  * Records one completed service. Appending a history row resets exactly that
@@ -271,4 +331,103 @@ export async function addVehicle(input: NewVehicle): Promise<string> {
   if (hErr) await cleanup(`Could not start the service history: ${hErr.message}`);
 
   return id;
+}
+
+/* --------------------------------------------------- recording a service */
+
+export type ServiceJob = {
+  vehicleId: string;
+  /** Only these items reset; anything the customer declined keeps its status. */
+  itemNames: string[];
+  technicianId: string | null;
+  odometer: number | null;
+  note: string | null;
+};
+
+/**
+ * Records one visit covering several items.
+ *
+ * Writes a job header plus one service_history row per item selected, which is
+ * what the dating engine reads — so exactly the chosen items reset and nothing
+ * else moves. Recording a service also lifts any inspection penalty on the
+ * vehicle, because the visit is taken to have addressed what was raised.
+ */
+export async function recordServiceJob(input: ServiceJob): Promise<number> {
+  const { admin, hasSupabase } = await import("./supabase/admin");
+  if (!hasSupabase || !admin) {
+    throw new Error("Recording a service needs Supabase; this deployment has none.");
+  }
+  if (input.itemNames.length === 0) {
+    throw new Error("Select at least one item that was serviced.");
+  }
+
+  const [{ data: cfg }, { data: items }] = await Promise.all([
+    admin.from("app_config").select("today").eq("id", 1).single(),
+    admin
+      .from("service_items")
+      .select("name, rule, cost_bdt")
+      .eq("vehicle_id", input.vehicleId),
+  ]);
+
+  const today: string = cfg?.today ?? new Date().toISOString().slice(0, 10);
+  const byName = new Map((items ?? []).map((i) => [i.name, i]));
+
+  const chosen = input.itemNames.filter((n) => byName.has(n));
+  if (chosen.length === 0) {
+    throw new Error("None of those items are on this vehicle.");
+  }
+
+  const total = chosen.reduce(
+    (n, name) => n + parseFloat(String(byName.get(name)!.cost_bdt)),
+    0
+  );
+
+  const { data: job, error: jErr } = await admin
+    .from("service_jobs")
+    .insert({
+      vehicle_id: input.vehicleId,
+      date: today,
+      odometer: input.odometer,
+      technician_id: input.technicianId,
+      note: input.note,
+      total_bdt: total,
+    })
+    .select("id")
+    .single();
+
+  if (jErr || !job) {
+    throw new Error(`Could not open the job sheet: ${jErr?.message ?? "unknown error"}`);
+  }
+
+  const { error: hErr } = await admin.from("service_history").insert(
+    chosen.map((name) => {
+      const item = byName.get(name)!;
+      return {
+        vehicle_id: input.vehicleId,
+        item_name: name,
+        date: today,
+        // A time-based item takes no odometer; only distance items need one.
+        km: item.rule === "distance_km" ? input.odometer : null,
+        cost_bdt: item.cost_bdt,
+        job_id: job.id,
+      };
+    })
+  );
+
+  if (hErr) {
+    // Never leave a job header with no items behind it.
+    await admin.from("service_jobs").delete().eq("id", job.id);
+    throw new Error(`Could not record the work: ${hErr.message}`);
+  }
+
+  if (input.odometer != null) {
+    await admin
+      .from("odometer_readings")
+      .upsert(
+        { vehicle_id: input.vehicleId, date: today, km: input.odometer },
+        { onConflict: "vehicle_id,date" }
+      );
+  }
+
+  return job.id;
 }

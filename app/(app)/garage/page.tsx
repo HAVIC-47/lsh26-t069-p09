@@ -67,7 +67,7 @@ export default async function GaragePage() {
             const items = rows
               .filter((r) => r.vehicleId === v.id)
               .sort((a, b) => a.daysUntil - b.daysUntil);
-            const score = healthScore(items);
+            const score = healthScore(items, v.inspection);
             const { rate, last } = dailyRun(v);
             const dueValue = items
               .filter((i) => i.status !== "fine")

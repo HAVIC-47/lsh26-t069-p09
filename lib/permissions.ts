@@ -91,10 +91,13 @@ export const MATRIX: {
     access: { admin: F, manager: F, technician: F, customer: N },
   },
   {
+    // DEPARTS FROM THE PUBLISHED MATRIX: the roles PDF gives this to Admin and
+    // Manager only. Technicians were granted it so the workshop floor can close
+    // out a job it has just done. Revert by setting technician back to N.
     key: "recordService",
     label: "Record completed services",
     published: true,
-    access: { admin: F, manager: F, technician: N, customer: N },
+    access: { admin: F, manager: F, technician: F, customer: N },
   },
   {
     key: "submitInspection",

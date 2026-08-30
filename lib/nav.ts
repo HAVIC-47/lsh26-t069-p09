@@ -8,6 +8,7 @@ import {
   Users,
   Settings,
   ClipboardCheck,
+  Hammer,
   CalendarPlus,
   type LucideIcon,
 } from "lucide-react";
@@ -33,10 +34,12 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/desk", label: "Priority Desk", icon: LayoutDashboard },
     { href: "/vehicles", label: "Fleet & Customers", icon: Car },
     { href: "/analytics", label: "8-Week Forecast", icon: ChartColumnBig },
+    { href: "/bay/service", label: "Service", icon: Hammer },
     { href: "/documents", label: "Documents", icon: FileText },
   ],
   technician: [
     { href: "/bay", label: "Today's Vehicles", icon: Warehouse },
+    { href: "/bay/service", label: "Service", icon: Hammer },
     { href: "/bay/inspect", label: "Inspections", icon: ClipboardCheck },
     { href: "/vehicles", label: "History Lookup", icon: Car },
   ],

@@ -47,7 +47,7 @@ export default async function BayPage() {
         last,
         rate,
         estimated,
-        health: healthScore(items),
+        health: healthScore(items, v.inspection),
         worst: Math.min(...items.map((i) => i.daysUntil), Infinity),
       };
     })

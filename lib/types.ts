@@ -26,6 +26,18 @@ export type HistoryRow = {
   cost_bdt: string;
 };
 
+/**
+ * Counts from the most recent inspection, carried on the vehicle so the health
+ * score can reflect what a technician actually saw. Absent when the vehicle has
+ * never been inspected, or when a service has happened since — a service is
+ * taken to have addressed what the inspection raised.
+ */
+export type InspectionFlags = {
+  attention: number;
+  fail: number;
+  date: string;
+};
+
 export type Vehicle = {
   id: string;
   owner_id: string;
@@ -34,6 +46,7 @@ export type Vehicle = {
   odometer_readings: Reading[];
   service_items: ServiceItem[];
   service_history: HistoryRow[];
+  inspection?: InspectionFlags;
 };
 
 export type WorkshopCase = {
