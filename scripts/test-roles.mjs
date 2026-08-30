@@ -2,6 +2,9 @@
  * End-to-end check that the four roles see what they should — and, crucially,
  * that a customer cannot reach another owner's vehicle.
  *
+ * Signed out, every workshop route redirects to /login and the database
+ * refuses anonymous reads — run supabase/migration-roles.sql for that to hold.
+ *
  * Needs a browser driver, which is not a project dependency:
  *   npm i -D playwright && npx playwright install chromium
  *
@@ -22,18 +25,31 @@ const fail = (m) => {
   failures++;
 };
 
+/**
+ * Polls for the redirect rather than waiting a fixed time. Sign-in runs an
+ * auth round trip plus a profile lookup and can take a couple of seconds on a
+ * cold route; a fixed timeout races it and every later assertion then fails
+ * against the login page instead of the app.
+ */
 async function signIn(page, email) {
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
   await page.fill("#email", email);
   await page.fill("#password", PASSWORD);
   await page.click("button[type=submit]");
+
+  for (let i = 0; i < 75; i++) {
+    if (!new URL(page.url()).pathname.startsWith("/login")) break;
+    await page.waitForTimeout(400);
+  }
+  if (new URL(page.url()).pathname.startsWith("/login")) {
+    fail(`sign-in for ${email} never left the login page`);
+  }
   await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(800);
 }
 
 async function vehicleCount(page) {
   await page.goto(`${BASE}/vehicles`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(900);
   return page.locator("tbody tr").count();
 }
 
@@ -43,17 +59,20 @@ console.log("\nSIGNED OUT");
 {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
-  const n = await vehicleCount(page);
-  n === 42
-    ? pass(`reads the whole workshop (${n} vehicles)`)
-    : fail(`expected 42 vehicles, saw ${n}`);
 
-  await page.goto(`${BASE}/vehicles/V01`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Mark done" }).first().click();
-  await page.waitForTimeout(1500);
-  /read-only|Sign in as a workshop manager/.test(await page.textContent("body"))
-    ? pass("writes are refused, with a reason")
-    : fail("a write was NOT refused while signed out");
+  // Every workshop route must bounce to the login page, and the landing page
+  // must carry no workshop data at all.
+  for (const route of ["/desk", "/vehicles", "/analytics", "/admin", "/bay", "/garage"]) {
+    await page.goto(`${BASE}${route}`, { waitUntil: "networkidle" });
+    new URL(page.url()).pathname === "/login"
+      ? pass(`${route} redirects to /login`)
+      : fail(`${route} did not redirect, landed on ${page.url()}`);
+  }
+
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  /Dhaka Metro/.test(await page.textContent("body"))
+    ? fail("*** LEAK: the public landing page shows workshop data ***")
+    : pass("the landing page carries no workshop data");
   await ctx.close();
 }
 
