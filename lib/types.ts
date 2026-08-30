@@ -36,6 +36,8 @@ export type InspectionFlags = {
   attention: number;
   fail: number;
   date: string;
+  /** The individual points raised, so they can be listed as work to do. */
+  points: { point: string; verdict: "attention" | "fail" }[];
 };
 
 export type Vehicle = {

@@ -12,7 +12,7 @@ import { Empty } from "@/components/ui/Empty";
 import { HealthGauge } from "@/components/ui/HealthGauge";
 import { Reveal } from "@/components/motion/Reveal";
 import { WorkshopDate } from "@/components/WorkshopDate";
-import { ServiceForm, type ServiceItemRow } from "./ServiceForm";
+import { ServiceForm, type FindingRow, type ServiceItemRow } from "./ServiceForm";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +48,16 @@ export default async function ServicePage({
     label: dueLabel(r.status, r.daysUntil),
     cost: r.cost,
   }));
+
+  // Points the latest inspection raised, for every vehicle that still has an
+  // outstanding one — a service clears them, so this list is only live work.
+  const findings: FindingRow[] = workshop.vehicles.flatMap((v) =>
+    (v.inspection?.points ?? []).map((pt) => ({
+      vehicleId: v.id,
+      point: pt.point,
+      verdict: pt.verdict,
+    }))
+  );
 
   const chosen = vehicles.find((v) => v.id === preselect) ?? vehicles[0];
   const chosenVehicle = workshop.vehicles.find((v) => v.id === chosen?.id);
@@ -97,6 +107,7 @@ export default async function ServicePage({
               <ServiceForm
                 vehicles={vehicles}
                 items={items}
+                findings={findings}
                 defaultVehicle={chosen?.id}
                 showMoney={showMoney}
               />

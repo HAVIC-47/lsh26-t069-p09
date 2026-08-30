@@ -130,10 +130,16 @@ async function latestInspectionFlags(
 ): Promise<Map<string, InspectionFlags>> {
   const out = new Map<string, InspectionFlags>();
 
-  const { data: inspections, error } = await supabase
-    .from("inspections")
-    .select("id, vehicle_id, created_at")
-    .order("created_at", { ascending: false });
+  const [{ data: inspections, error }, { data: jobs }] = await Promise.all([
+    supabase
+      .from("inspections")
+      .select("id, vehicle_id, created_at")
+      .order("created_at", { ascending: false }),
+    // A visit that only addressed inspection findings writes a job sheet but no
+    // history row, so job dates count as a service too — otherwise the findings
+    // would stay on the list forever after being dealt with.
+    supabase.from("service_jobs").select("vehicle_id, date"),
+  ]);
 
   if (error || !inspections || inspections.length === 0) return out;
 
@@ -146,11 +152,13 @@ async function latestInspectionFlags(
   }
 
   const lastService = new Map<string, string>();
-  for (const h of history) {
-    const prev = lastService.get(h.vehicle_id);
-    if (!prev || h.date > prev) lastService.set(h.vehicle_id, h.date);
+  for (const row of [...history, ...(jobs ?? [])]) {
+    const prev = lastService.get(row.vehicle_id);
+    if (!prev || row.date > prev) lastService.set(row.vehicle_id, row.date);
   }
 
+  // Strictly greater, so a service on the same day as the inspection clears it:
+  // both carry a date and no time, and same-day work is the response to it.
   const live = [...newest.entries()].filter(([vehicleId, insp]) => {
     const serviced = lastService.get(vehicleId);
     return !serviced || insp.date > serviced;
@@ -159,14 +167,25 @@ async function latestInspectionFlags(
 
   const { data: points } = await supabase
     .from("inspection_items")
-    .select("inspection_id, verdict")
+    .select("inspection_id, point, verdict")
     .in("inspection_id", live.map(([, i]) => i.id));
 
   for (const [vehicleId, insp] of live) {
-    const mine = (points ?? []).filter((p) => p.inspection_id === insp.id);
-    const attention = mine.filter((p) => p.verdict === "attention").length;
-    const fail = mine.filter((p) => p.verdict === "fail").length;
-    if (attention || fail) out.set(vehicleId, { attention, fail, date: insp.date });
+    const raised = (points ?? [])
+      .filter((p) => p.inspection_id === insp.id && p.verdict !== "pass")
+      .map((p) => ({
+        point: String(p.point),
+        verdict: p.verdict as "attention" | "fail",
+      }));
+
+    if (raised.length === 0) continue;
+
+    out.set(vehicleId, {
+      attention: raised.filter((p) => p.verdict === "attention").length,
+      fail: raised.filter((p) => p.verdict === "fail").length,
+      date: insp.date,
+      points: raised,
+    });
   }
 
   return out;
@@ -357,9 +376,8 @@ export async function recordServiceJob(input: ServiceJob): Promise<number> {
   if (!hasSupabase || !admin) {
     throw new Error("Recording a service needs Supabase; this deployment has none.");
   }
-  if (input.itemNames.length === 0) {
-    throw new Error("Select at least one item that was serviced.");
-  }
+  // A visit may address only inspection findings, which are recorded on the
+  // job note rather than as interval resets — so an empty item list is valid.
 
   const [{ data: cfg }, { data: items }] = await Promise.all([
     admin.from("app_config").select("today").eq("id", 1).single(),
@@ -373,7 +391,7 @@ export async function recordServiceJob(input: ServiceJob): Promise<number> {
   const byName = new Map((items ?? []).map((i) => [i.name, i]));
 
   const chosen = input.itemNames.filter((n) => byName.has(n));
-  if (chosen.length === 0) {
+  if (input.itemNames.length > 0 && chosen.length === 0) {
     throw new Error("None of those items are on this vehicle.");
   }
 
@@ -398,6 +416,8 @@ export async function recordServiceJob(input: ServiceJob): Promise<number> {
   if (jErr || !job) {
     throw new Error(`Could not open the job sheet: ${jErr?.message ?? "unknown error"}`);
   }
+
+  if (chosen.length === 0) return job.id;
 
   const { error: hErr } = await admin.from("service_history").insert(
     chosen.map((name) => {

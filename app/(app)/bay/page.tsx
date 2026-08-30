@@ -8,6 +8,7 @@ import {
   Hammer,
   Info,
   ChevronRight,
+  Search,
 } from "lucide-react";
 import { can, requireRole } from "@/lib/auth";
 import { loadCase } from "@/lib/data";
@@ -21,21 +22,35 @@ import { Empty } from "@/components/ui/Empty";
 import { HealthGauge } from "@/components/ui/HealthGauge";
 import { OdometerForm } from "@/components/OdometerForm";
 import { Reveal } from "@/components/motion/Reveal";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { WorkshopDate } from "@/components/WorkshopDate";
 
 export const dynamic = "force-dynamic";
 
-export default async function BayPage() {
+const FILTERS = [
+  { key: "all", label: "Everything" },
+  { key: "overdue", label: "Overdue" },
+  { key: "due_soon", label: "Due soon" },
+] as const;
+
+export default async function BayPage({ searchParams }: PageProps<"/bay">) {
   await requireRole("viewBayQueue");
   const canService = await can("recordService");
 
+  const params = await searchParams;
+  const q = (typeof params.q === "string" ? params.q : "").trim();
+  const needle = q.toLowerCase();
+  const digits = needle.replace(/\D/g, "");
+  const filter = typeof params.filter === "string" ? params.filter : "all";
+
   const workshop = await loadCase();
   const rows = analyse(workshop);
+  const ownerName = new Map(workshop.owners.map((o) => [o.id, o.name]));
 
   // No check-in table exists yet, so the queue is derived: the vehicles with
   // work actually outstanding, worst first. Labelled honestly rather than
   // presented as a list of cars physically in the bay.
-  const queue = workshop.vehicles
+  const everything = workshop.vehicles
     .map((v) => {
       const items = rows.filter((r) => r.vehicleId === v.id);
       const overdue = items.filter((i) => i.status === "overdue");
@@ -43,6 +58,7 @@ export default async function BayPage() {
       const { last, rate, estimated } = dailyRun(v);
       return {
         v,
+        owner: ownerName.get(v.owner_id) ?? "Unknown owner",
         items,
         overdue,
         soon,
@@ -55,6 +71,38 @@ export default async function BayPage() {
     })
     .filter((x) => x.overdue.length > 0 || x.soon.length > 0)
     .sort((a, b) => a.worst - b.worst);
+
+  const queue = everything
+    .filter((x) =>
+      filter === "overdue"
+        ? x.overdue.length > 0
+        : filter === "due_soon"
+          ? x.soon.length > 0
+          : true
+    )
+    .filter((x) => {
+      if (!needle) return true;
+      const plate = x.v.plate.toLowerCase();
+      return (
+        plate.includes(needle) ||
+        x.owner.toLowerCase().includes(needle) ||
+        x.v.model.toLowerCase().includes(needle) ||
+        // Digits alone should match a plate, so "156408" finds "Kha 15-6408".
+        (digits.length >= 3 && plate.replace(/\D/g, "").includes(digits))
+      );
+    });
+
+  const keep = (extra: Record<string, string>) => {
+    const sp = new URLSearchParams();
+    if (q) sp.set("q", q);
+    if (filter !== "all") sp.set("filter", filter);
+    for (const [k, v] of Object.entries(extra)) {
+      if (v) sp.set(k, v);
+      else sp.delete(k);
+    }
+    const str = sp.toString();
+    return str ? `/bay?${str}` : "/bay";
+  };
 
   const totalOverdue = rows.filter((r) => r.status === "overdue").length;
   const totalSoon = rows.filter((r) => r.status === "due_soon").length;
@@ -70,7 +118,7 @@ export default async function BayPage() {
       </header>
 
       <Reveal className="grid grid-cols-3 gap-3">
-        <KpiCard label="Vehicles in queue" value={queue.length} icon={Warehouse} />
+        <KpiCard label="Vehicles in queue" value={everything.length} icon={Warehouse} />
         <KpiCard label="Items overdue" value={totalOverdue} tone="overdue" icon={AlertTriangle} />
         <KpiCard label="Due soon" value={totalSoon} tone="soon" icon={Clock} />
       </Reveal>
@@ -83,11 +131,58 @@ export default async function BayPage() {
         </span>
       </p>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <form className="flex min-w-0 flex-1 gap-2 sm:max-w-sm">
+          {filter !== "all" && <input type="hidden" name="filter" value={filter} />}
+          <div className="relative min-w-0 flex-1">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-faint"
+              strokeWidth={2}
+              aria-hidden="true"
+            />
+            <label className="sr-only" htmlFor="q">
+              Search by owner name, car number or model
+            </label>
+            <input
+              id="q"
+              name="q"
+              defaultValue={q}
+              placeholder="Owner, car number or model…"
+              className="h-11 w-full rounded-lg border border-border bg-surface pr-3 pl-9 text-sm placeholder:text-faint"
+            />
+          </div>
+          <Button type="submit">Search</Button>
+        </form>
+
+        <div className="flex gap-1.5">
+          {FILTERS.map((f) => (
+            <ButtonLink
+              key={f.key}
+              href={keep({ filter: f.key === "all" ? "" : f.key })}
+              size="sm"
+              variant={filter === f.key ? "primary" : "secondary"}
+            >
+              {f.label}
+            </ButtonLink>
+          ))}
+        </div>
+
+        <span className="ml-auto text-xs text-muted">
+          {queue.length} of {everything.length}
+        </span>
+      </div>
+
       {queue.length === 0 ? (
         <Empty
           icon={Warehouse}
-          title="Nothing outstanding"
-          body="Every vehicle on the register is inside its service intervals."
+          title={q || filter !== "all" ? "Nothing matches" : "Nothing outstanding"}
+          body={
+            q
+              ? `No vehicle in the queue matches “${q}”.`
+              : filter !== "all"
+                ? "No vehicle matches this filter."
+                : "Every vehicle on the register is inside its service intervals."
+          }
         />
       ) : (
         <Reveal className="space-y-4">
@@ -98,7 +193,9 @@ export default async function BayPage() {
 
                 <div className="min-w-0 flex-1">
                   <h2 className="nums text-lg font-semibold">{x.v.plate}</h2>
-                  <p className="text-sm text-muted">{x.v.model}</p>
+                  <p className="text-sm text-muted">
+                    {x.v.model} · {x.owner}
+                  </p>
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted">
                     <span className="inline-flex items-center gap-1">
                       <Gauge className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />

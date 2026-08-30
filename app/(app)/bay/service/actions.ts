@@ -25,13 +25,25 @@ export async function saveServiceJobAction(
 
   const vehicleId = String(formData.get("vehicle_id") ?? "");
   const itemNames = formData.getAll("items").map(String).filter(Boolean);
-  const note = String(formData.get("note") ?? "").trim() || null;
+  const raised = formData.getAll("inspection_points").map(String).filter(Boolean);
+  const typed = String(formData.get("note") ?? "").trim();
   const confirmed = formData.get("confirmAnomaly") === "yes";
 
   if (!vehicleId) return { ok: false, message: "Pick a vehicle." };
-  if (itemNames.length === 0) {
+  if (itemNames.length === 0 && raised.length === 0) {
     return { ok: false, message: "Tick the items that were actually serviced." };
   }
+
+  // Inspection findings are not catalogue items, so they cannot reset an
+  // interval. They are recorded on the job sheet instead, which is what a
+  // later reader needs — and the service itself clears the health penalty.
+  const note =
+    [
+      typed,
+      raised.length ? `Inspection findings addressed: ${raised.join(", ")}.` : "",
+    ]
+      .filter(Boolean)
+      .join(" ") || null;
 
   const workshop = await loadCase();
   const vehicle = workshop.vehicles.find((v) => v.id === vehicleId);
@@ -77,11 +89,21 @@ export async function saveServiceJobAction(
   revalidatePath(`/vehicles/${vehicleId}`);
 
   const n = itemNames.length;
-  return {
-    ok: true,
-    message:
-      `${n} item${n === 1 ? "" : "s"} recorded as done. ` +
-      `${n === 1 ? "Its" : "Their"} next due date has moved and the service ` +
-      `history is updated. Anything left unticked keeps its current status.`,
-  };
+  const parts: string[] = [];
+  if (n) {
+    parts.push(
+      `${n} item${n === 1 ? "" : "s"} recorded as done — ` +
+        `${n === 1 ? "its" : "their"} next due date has moved and the service ` +
+        `history is updated.`
+    );
+  }
+  if (raised.length) {
+    parts.push(
+      `${raised.length} inspection finding${raised.length === 1 ? "" : "s"} ` +
+        `noted on the job sheet, and the health penalty from that inspection is cleared.`
+    );
+  }
+  parts.push("Anything left unticked keeps its current status.");
+
+  return { ok: true, message: parts.join(" ") };
 }
