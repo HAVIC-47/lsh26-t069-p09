@@ -76,9 +76,16 @@ async function clearUsers() {
 }
 
 async function seedWorkshop(cc: WorkshopCase) {
-  // Children first — everything cascades from vehicles and owners.
+  // Children first. The filter is `id is not null` rather than a value
+  // comparison: id is text on some tables and bigint on others, and comparing a
+  // sentinel string against a bigint column throws — which the previous version
+  // did silently, leaving those tables to be cleared only as a side effect of
+  // the vehicles cascade.
   for (const t of [
     "call_logs",
+    "inspection_items",
+    "inspections",
+    "service_requests",
     "service_history",
     "service_jobs",
     "service_items",
@@ -86,7 +93,13 @@ async function seedWorkshop(cc: WorkshopCase) {
     "vehicles",
     "owners",
   ]) {
-    await db.from(t).delete().neq("id", "__none__");
+    const { error } = await db.from(t).delete().not("id", "is", null);
+    // A table the role migration has not created yet is fine to skip; anything
+    // else is a real failure and must not pass quietly.
+    if (error && !/does not exist|schema cache/i.test(error.message)) {
+      console.error(`✗ clearing ${t}: ${error.message}`);
+      process.exit(1);
+    }
   }
   await db.from("app_config").delete().eq("id", 1);
   console.log("✓ cleared existing rows");

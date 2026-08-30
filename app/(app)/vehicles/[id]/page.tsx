@@ -12,10 +12,13 @@ import {
 import { loadCase } from "@/lib/data";
 import { can, requireUser } from "@/lib/auth";
 import { analyse, dailyRun } from "@/lib/engine";
+import { healthScore, HEALTH_RULE } from "@/lib/scoring";
 import { formatDate } from "@/lib/dates";
 import { km as fmtKm, taka } from "@/lib/format";
 import { StatusBadge, Tag } from "@/components/ui/Badge";
 import { KpiCard } from "@/components/ui/KpiCard";
+import { HealthGauge } from "@/components/ui/HealthGauge";
+import { InspectionSummary } from "@/components/ui/HealthDot";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Reveal } from "@/components/motion/Reveal";
 import { RecordServiceForm } from "@/components/RecordServiceForm";
@@ -47,6 +50,7 @@ export default async function VehiclePage({ params }: PageProps<"/vehicles/[id]"
     .sort((a, b) => b.urgency - a.urgency);
 
   const { rate, last, span, first } = dailyRun(vehicle);
+  const health = healthScore(items, vehicle.inspection);
   const overdue = items.filter((i) => i.status === "overdue");
   const dueValue = items
     .filter((i) => i.status !== "fine")
@@ -92,6 +96,25 @@ export default async function VehiclePage({ params }: PageProps<"/vehicles/[id]"
           )}
         </div>
       </header>
+
+      <Card className="mb-5">
+        <div className="flex flex-wrap items-center gap-5">
+          <HealthGauge score={health} size={92} />
+          <div className="min-w-0 flex-1">
+            <p className="eyebrow">Vehicle health</p>
+            <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[13px] text-muted">
+              <span>Recent inspection</span>
+              <InspectionSummary inspection={vehicle.inspection} />
+              {vehicle.inspection && (
+                <span className="text-faint">
+                  on {formatDate(vehicle.inspection.date)}
+                </span>
+              )}
+            </p>
+            <p className="mt-2 text-xs text-muted">{HEALTH_RULE}</p>
+          </div>
+        </div>
+      </Card>
 
       <Reveal className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard

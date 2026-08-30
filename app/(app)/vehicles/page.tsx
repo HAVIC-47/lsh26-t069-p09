@@ -3,8 +3,10 @@ import { Car, Search } from "lucide-react";
 import { loadCase } from "@/lib/data";
 import { can, requireRole } from "@/lib/auth";
 import { analyse, dailyRun } from "@/lib/engine";
+import { healthScore } from "@/lib/scoring";
 import { km as fmtKm, taka } from "@/lib/format";
 import { Empty } from "@/components/ui/Empty";
+import { HealthDot, InspectionSummary } from "@/components/ui/HealthDot";
 import { Button } from "@/components/ui/Button";
 import { Reveal } from "@/components/motion/Reveal";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -32,6 +34,7 @@ export default async function VehiclesPage({ searchParams }: PageProps<"/vehicle
       const mine = rows.filter((r) => r.vehicleId === v.id);
       return {
         v,
+        health: healthScore(mine, v.inspection),
         owner: owners.get(v.owner_id),
         overdue: mine.filter((r) => r.status === "overdue").length,
         soon: mine.filter((r) => r.status === "due_soon").length,
@@ -114,6 +117,8 @@ export default async function VehiclesPage({ searchParams }: PageProps<"/vehicle
                   <th className="px-4 py-2.5 font-medium">Vehicle</th>
                   <th className="px-4 py-2.5 font-medium">Owner</th>
                   <th className="px-4 py-2.5 text-right font-medium">Odometer</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Health</th>
+                  <th className="px-4 py-2.5 font-medium">Recent inspection</th>
                   <th className="px-4 py-2.5 text-right font-medium">Overdue</th>
                   <th className="px-4 py-2.5 text-right font-medium">Due soon</th>
                   {showMoney && (
@@ -136,6 +141,12 @@ export default async function VehiclesPage({ searchParams }: PageProps<"/vehicle
                     <td className="px-4 py-2.5">{x.owner?.name}</td>
                     <td className="px-4 py-2.5 text-right nums text-xs">
                       {fmtKm(x.odo)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <HealthDot score={x.health} />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <InspectionSummary inspection={x.v.inspection} />
                     </td>
                     <td className="px-4 py-2.5 text-right nums">
                       {x.overdue > 0 ? (

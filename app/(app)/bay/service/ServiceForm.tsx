@@ -33,6 +33,7 @@ export function ServiceForm({
   findings,
   defaultVehicle,
   showMoney,
+  onVehicleChange,
 }: {
   vehicles: PickerVehicle[];
   /** Every vehicle's items, filtered client-side so picking a car is instant. */
@@ -41,6 +42,8 @@ export function ServiceForm({
   findings: FindingRow[];
   defaultVehicle?: string;
   showMoney: boolean;
+  /** Lets the surrounding panel follow the picker. */
+  onVehicleChange?: (id: string) => void;
 }) {
   const [state, action, pending] = useActionState<ServiceJobState, FormData>(
     saveServiceJobAction,
@@ -69,6 +72,7 @@ export function ServiceForm({
 
   function choose(v: PickerVehicle) {
     setVehicleId(v.id);
+    onVehicleChange?.(v.id);
     setOdometer(v.km);
     setTicked(new Set()); // a different car means a different job sheet
     setTickedPoints(new Set());
